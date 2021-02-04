@@ -30,12 +30,12 @@ def get_config(args=None):
     parser = argparse.ArgumentParser(description="Meta optimization")
     parser.add_argument('--epoch_size', type=int, default=5120000, help='Epoch size')
 
-    parser.add_argument('--num_lstm_units', type=int, default=128, help="number of LSTM units")
+    #parser.add_argument('--num_lstm_units', type=int, default=128, help="number of LSTM units")
     parser.add_argument('--num_feedforward_units', type=int, default=128, help="number of feedforward units")
     parser.add_argument('--problem', default='vrp', help="the problem to be solved, {tsp, vrp}")
     parser.add_argument('--train_operators', type=str2bool, nargs='?', const=True, default=False, help="")
-    parser.add_argument('--depot_positioning', default='R', help="{R, C, E}")
-    parser.add_argument('--customer_positioning', default='R', help="{R, C, RC}")
+    #parser.add_argument('--depot_positioning', default='R', help="{R, C, E}")
+    #parser.add_argument('--customer_positioning', default='R', help="{R, C, RC}")
 
     parser.add_argument('--num_training_points', type=int, default=100, help="size of the problem for training")
     parser.add_argument('--num_test_points', type=int, default=100, help="size of the problem for testing")
@@ -45,9 +45,9 @@ def get_config(args=None):
     parser.add_argument('--batch_size', type=int, default=1000, help='batch size')
     parser.add_argument('--max_rollout_steps', type=int, default=20000, help="maximum rollout steps")
     parser.add_argument('--max_rollout_seconds', type=int, default=1000, help="maximum rollout time in seconds")
-    parser.add_argument('--use_cyclic_rollout', type=str2bool, nargs='?', const=True, default=False, help="use cyclic rollout")
-    parser.add_argument('--use_random_rollout',type=str2bool, nargs='?', const=True, default=False, help="use random rollout")
-    parser.add_argument('--detect_negative_cycle', type=str2bool, nargs='?', const=True, default=False, help="")
+    #parser.add_argument('--use_cyclic_rollout', type=str2bool, nargs='?', const=True, default=False, help="use cyclic rollout")
+    #parser.add_argument('--use_random_rollout',type=str2bool, nargs='?', const=True, default=False, help="use random rollout")
+    #parser.add_argument('--detect_negative_cycle', type=str2bool, nargs='?', const=True, default=False, help="")
     parser.add_argument('--use_rl_loss', type=str2bool, nargs='?', const=True, default=True, help="")
     parser.add_argument('--use_attention_embedding', type=str2bool, nargs='?', const=True, default=True, help="")
     parser.add_argument('--epsilon_greedy', type=float, default=0.05, help="")
@@ -67,7 +67,7 @@ def get_config(args=None):
     parser.add_argument('--policy_learning_rate', type=float, default=0.001, help="learning rate of policy network")
     parser.add_argument('--hidden_layer_dim', type=int, default=64, help="dimension of hidden layer in policy network")
     parser.add_argument('--num_history_action_use', type=int, default=0, help="number of history actions used in the representation of current state")
-    parser.add_argument('--use_history_action_distribution', type=str2bool, nargs='?', const=True, default=False, help="")
+    #parser.add_argument('--use_history_action_distribution', type=str2bool, nargs='?', const=True, default=False, help="")
     parser.add_argument('--step_interval', type=int, default=500)
 
     # './rollout_model_1850.ckpt'
@@ -913,21 +913,22 @@ keep_prob = tf.placeholder(tf.float32)
 
 
 def build_multi_operator_model(raw_input):
-    input_sequence = tf.unstack(raw_input, config.num_training_points, 1)
-    lstm_fw_cell = rnn.BasicLSTMCell(config.num_lstm_units, forget_bias=1.0)
-    lstm_bw_cell = rnn.BasicLSTMCell(config.num_lstm_units, forget_bias=1.0)
-    lstm_output, _, _ = rnn.static_bidirectional_rnn(lstm_fw_cell, lstm_bw_cell, input_sequence, dtype=tf.float32)
-    layer_1 = lstm_output[-1]
-
-    layer_2 = tf.contrib.layers.fully_connected(layer_1, config.num_feedforward_units, activation_fn=tf.nn.relu)
-    layer_2 = tf.contrib.layers.fully_connected(layer_2, config.num_lstm_units, activation_fn=None)
-    layer_2 += layer_1
-    layer_2 = tf.contrib.layers.batch_norm(layer_2, is_training=is_training)
-    layer_2 = tf.nn.relu(layer_2)
-    # layer_2 = tf.nn.dropout(layer_2, keep_prob)
-
-    output_layer = tf.contrib.layers.fully_connected(layer_2, config.num_training_points, activation_fn=None)
-    return output_layer
+    pass
+    # input_sequence = tf.unstack(raw_input, config.num_training_points, 1)
+    # lstm_fw_cell = rnn.BasicLSTMCell(config.num_lstm_units, forget_bias=1.0)
+    # lstm_bw_cell = rnn.BasicLSTMCell(config.num_lstm_units, forget_bias=1.0)
+    # lstm_output, _, _ = rnn.static_bidirectional_rnn(lstm_fw_cell, lstm_bw_cell, input_sequence, dtype=tf.float32)
+    # layer_1 = lstm_output[-1]
+    #
+    # layer_2 = tf.contrib.layers.fully_connected(layer_1, config.num_feedforward_units, activation_fn=tf.nn.relu)
+    # layer_2 = tf.contrib.layers.fully_connected(layer_2, config.num_lstm_units, activation_fn=None)
+    # layer_2 += layer_1
+    # layer_2 = tf.contrib.layers.batch_norm(layer_2, is_training=is_training)
+    # layer_2 = tf.nn.relu(layer_2)
+    # # layer_2 = tf.nn.dropout(layer_2, keep_prob)
+    #
+    # output_layer = tf.contrib.layers.fully_connected(layer_2, config.num_training_points, activation_fn=None)
+    # return output_layer
 
 
 def get_random_capacities(n):
@@ -1196,46 +1197,46 @@ def reconstruct_solution_by_exchange(problem, existing_solution, paths_ruined):
 
 def reconstruct_solution(problem, existing_solution, step):
     distance_hash = round(calculate_solution_distance(problem, existing_solution) * 1e6)
-    if config.detect_negative_cycle and distance_hash not in problem.distance_hashes:
-        problem.add_distance_hash(distance_hash)
-        positive_cycles = []
-        cycle_selected = None
-        for capacity in range(1, 10):
-            # TODO: relax the requirement of ==capacity
-            # TODO: caching, sparsify
-            graph = construct_graph(problem, existing_solution, capacity)
-            negative_cycle, flag = graph.find_negative_cycle()
-            if negative_cycle:
-                if flag == -1.0:
-                    cycle_selected = negative_cycle
-                    break
-                else:
-                    positive_cycles.append(negative_cycle)
-        if cycle_selected is None and len(positive_cycles) > 0:
-            index = np.random.choice(range(len(positive_cycles)), 1)[0]
-            cycle_selected = positive_cycles[index]
-        if cycle_selected is not None:
-                negative_cycle = cycle_selected
-                improved_solution = copy.deepcopy(existing_solution)
-                customers = []
-                for pair in negative_cycle:
-                    path_index, node_index = pair[0], pair[1]
-                    customers.append(improved_solution[path_index][node_index])
-                customers = [customers[-1]] + customers[:-1]
-                for index in range(len(negative_cycle)):
-                    pair = negative_cycle[index]
-                    path_index, node_index = pair[0], pair[1]
-                    improved_solution[path_index][node_index] = customers[index]
-                    problem.mark_change_at(step, [path_index])
-                # if not validate_solution(problem, improved_solution):
-                #     print('existing_solution={}, invalid improved_solution={}, negative_cycle={}'.format(
-                #         existing_solution, improved_solution, negative_cycle))
-                # else:
-                #     print('cost={}, negative_cycle={}'.format(
-                #         calculate_solution_distance(problem, improved_solution) - calculate_solution_distance(problem, existing_solution),
-                #         negative_cycle)
-                #     )
-                return improved_solution
+    # if config.detect_negative_cycle and distance_hash not in problem.distance_hashes:
+    #     problem.add_distance_hash(distance_hash)
+    #     positive_cycles = []
+    #     cycle_selected = None
+    #     for capacity in range(1, 10):
+    #         # TODO: relax the requirement of ==capacity
+    #         # TODO: caching, sparsify
+    #         graph = construct_graph(problem, existing_solution, capacity)
+    #         negative_cycle, flag = graph.find_negative_cycle()
+    #         if negative_cycle:
+    #             if flag == -1.0:
+    #                 cycle_selected = negative_cycle
+    #                 break
+    #             else:
+    #                 positive_cycles.append(negative_cycle)
+    #     if cycle_selected is None and len(positive_cycles) > 0:
+    #         index = np.random.choice(range(len(positive_cycles)), 1)[0]
+    #         cycle_selected = positive_cycles[index]
+    #     if cycle_selected is not None:
+    #             negative_cycle = cycle_selected
+    #             improved_solution = copy.deepcopy(existing_solution)
+    #             customers = []
+    #             for pair in negative_cycle:
+    #                 path_index, node_index = pair[0], pair[1]
+    #                 customers.append(improved_solution[path_index][node_index])
+    #             customers = [customers[-1]] + customers[:-1]
+    #             for index in range(len(negative_cycle)):
+    #                 pair = negative_cycle[index]
+    #                 path_index, node_index = pair[0], pair[1]
+    #                 improved_solution[path_index][node_index] = customers[index]
+    #                 problem.mark_change_at(step, [path_index])
+    #             # if not validate_solution(problem, improved_solution):
+    #             #     print('existing_solution={}, invalid improved_solution={}, negative_cycle={}'.format(
+    #             #         existing_solution, improved_solution, negative_cycle))
+    #             # else:
+    #             #     print('cost={}, negative_cycle={}'.format(
+    #             #         calculate_solution_distance(problem, improved_solution) - calculate_solution_distance(problem, existing_solution),
+    #             #         negative_cycle)
+    #             #     )
+    #             return improved_solution
 
     solution = []
     n = problem.get_num_customers()
@@ -1336,36 +1337,36 @@ def generate_problem():
     if config.problem == 'vrp':
         num_sample_points += 1
     locations = np.random.uniform(size=(num_sample_points, 2))
-    if config.problem == 'vrp':
-        if config.depot_positioning == 'C':  # j, not used
-            locations[0][0] = 0.5
-            locations[0][1] = 0.5
-        elif config.depot_positioning == 'E':  # j, not used
-            locations[0][0] = 0.0
-            locations[0][1] = 0.0
-        if config.customer_positioning in {'C', 'RC'}:  # j, not used
-            S = np.random.randint(6) + 3
-            centers = locations[1 : (S + 1)]
-            grid_centers, probabilities = [], []
-            for x in range(0, 1000):
-                for y in range(0, 1000):
-                    grid_center = [(x + 0.5) / 1000.0, (y + 0.5) / 1000.0]
-                    p = 0.0
-                    for center in centers:
-                        distance = calculate_distance(grid_center, center)
-                        p += math.exp(-distance * 1000.0 / 40.0)
-                    grid_centers.append(grid_center)
-                    probabilities.append(p)
-            probabilities = np.asarray(probabilities) / np.sum(probabilities)
-            if config.customer_positioning in 'C':
-                num_clustered_locations = get_num_points(config) - S
-            else:
-                num_clustered_locations = get_num_points(config) // 2 - S
-            grid_indices = np.random.choice(range(len(grid_centers)), num_clustered_locations, p=probabilities)
-            for index in range(num_clustered_locations):
-                grid_index = grid_indices[index]
-                locations[index + S + 1][0] = grid_centers[grid_index][0] + (np.random.uniform() - 0.5) / 1000.0
-                locations[index + S + 1][1] = grid_centers[grid_index][1] + (np.random.uniform() - 0.5) / 1000.0
+    # if config.problem == 'vrp':
+    #     if config.depot_positioning == 'C':  # j, not used
+    #         locations[0][0] = 0.5
+    #         locations[0][1] = 0.5
+    #     elif config.depot_positioning == 'E':  # j, not used
+    #         locations[0][0] = 0.0
+    #         locations[0][1] = 0.0
+    #     if config.customer_positioning in {'C', 'RC'}:  # j, not used
+    #         S = np.random.randint(6) + 3
+    #         centers = locations[1 : (S + 1)]
+    #         grid_centers, probabilities = [], []
+    #         for x in range(0, 1000):
+    #             for y in range(0, 1000):
+    #                 grid_center = [(x + 0.5) / 1000.0, (y + 0.5) / 1000.0]
+    #                 p = 0.0
+    #                 for center in centers:
+    #                     distance = calculate_distance(grid_center, center)
+    #                     p += math.exp(-distance * 1000.0 / 40.0)
+    #                 grid_centers.append(grid_center)
+    #                 probabilities.append(p)
+    #         probabilities = np.asarray(probabilities) / np.sum(probabilities)
+    #         if config.customer_positioning in 'C':
+    #             num_clustered_locations = get_num_points(config) - S
+    #         else:
+    #             num_clustered_locations = get_num_points(config) // 2 - S
+    #         grid_indices = np.random.choice(range(len(grid_centers)), num_clustered_locations, p=probabilities)
+    #         for index in range(num_clustered_locations):
+    #             grid_index = grid_indices[index]
+    #             locations[index + S + 1][0] = grid_centers[grid_index][0] + (np.random.uniform() - 0.5) / 1000.0
+    #             locations[index + S + 1][1] = grid_centers[grid_index][1] + (np.random.uniform() - 0.5) / 1000.0
 
     capacities = get_random_capacities(len(locations))
     problem = Problem(locations, capacities)
@@ -1403,18 +1404,19 @@ def embedding_net_2(input_):
 
 
 def embedding_net(input_):
-    with tf.variable_scope("embedding_net"):
-        first_trip = input_[:, 0, :, :]
-        first_trip = tf.reshape(first_trip, [-1, config.max_points_per_trip, config.input_embedded_trip_dim])
-        trip_embedding = embedding_net_lstm(first_trip)
-        for trip_index in range(1, config.max_trips_per_solution):
-            with tf.variable_scope("lstm", reuse=True):
-                trip = input_[:, trip_index, :, :]
-                trip = tf.reshape(trip, [-1, config.max_points_per_trip, config.input_embedded_trip_dim])
-                current_trip_embedding = embedding_net_lstm(trip)
-                trip_embedding = tf.concat([trip_embedding, current_trip_embedding], axis=1)
-        attention_embedding = embedding_net_attention(trip_embedding)
-    return attention_embedding
+    pass
+    # with tf.variable_scope("embedding_net"):
+    #     first_trip = input_[:, 0, :, :]
+    #     first_trip = tf.reshape(first_trip, [-1, config.max_points_per_trip, config.input_embedded_trip_dim])
+    #     trip_embedding = embedding_net_lstm(first_trip)
+    #     for trip_index in range(1, config.max_trips_per_solution):
+    #         with tf.variable_scope("lstm", reuse=True):
+    #             trip = input_[:, trip_index, :, :]
+    #             trip = tf.reshape(trip, [-1, config.max_points_per_trip, config.input_embedded_trip_dim])
+    #             current_trip_embedding = embedding_net_lstm(trip)
+    #             trip_embedding = tf.concat([trip_embedding, current_trip_embedding], axis=1)
+    #     attention_embedding = embedding_net_attention(trip_embedding)
+    # return attention_embedding
 
 
 def embed_trip(trip, points_in_trip):
@@ -1428,20 +1430,21 @@ def embed_trip(trip, points_in_trip):
 
 
 def embedding_net_lstm(input_):
-    seq = tf.unstack(input_, config.max_points_per_trip, 1)
-    num_hidden = 128
-    with tf.variable_scope("lstm_embeding", reuse=tf.AUTO_REUSE):
-        lstm_fw_cell1 = rnn.BasicLSTMCell(num_hidden, forget_bias=1.0)
-        lstm_bw_cell1 = rnn.BasicLSTMCell(num_hidden, forget_bias=1.0)
-        try:
-            outputs, _, _ = rnn.static_bidirectional_rnn(lstm_fw_cell1, lstm_bw_cell1, seq, dtype=tf.float32)
-        except Exception:  # Old TensorFlow version only returns outputs not states
-            outputs = rnn.static_bidirectional_rnn(lstm_fw_cell1, lstm_bw_cell1, seq, dtype=tf.float32)
-        layer_lstm = outputs[-1]
-        layer_2 = tf.contrib.layers.fully_connected(layer_lstm, config.num_embedded_dim, activation_fn=tf.nn.relu)
-        layer_2 = tf.nn.dropout(layer_2, keep_prob)
-        layer_2 = tf.reshape(layer_2, [-1, 1, config.num_embedded_dim])
-    return layer_2
+    pass
+    # seq = tf.unstack(input_, config.max_points_per_trip, 1)
+    # num_hidden = 128
+    # with tf.variable_scope("lstm_embeding", reuse=tf.AUTO_REUSE):
+    #     lstm_fw_cell1 = rnn.BasicLSTMCell(num_hidden, forget_bias=1.0)
+    #     lstm_bw_cell1 = rnn.BasicLSTMCell(num_hidden, forget_bias=1.0)
+    #     try:
+    #         outputs, _, _ = rnn.static_bidirectional_rnn(lstm_fw_cell1, lstm_bw_cell1, seq, dtype=tf.float32)
+    #     except Exception:  # Old TensorFlow version only returns outputs not states
+    #         outputs = rnn.static_bidirectional_rnn(lstm_fw_cell1, lstm_bw_cell1, seq, dtype=tf.float32)
+    #     layer_lstm = outputs[-1]
+    #     layer_2 = tf.contrib.layers.fully_connected(layer_lstm, config.num_embedded_dim, activation_fn=tf.nn.relu)
+    #     layer_2 = tf.nn.dropout(layer_2, keep_prob)
+    #     layer_2 = tf.reshape(layer_2, [-1, 1, config.num_embedded_dim])
+    # return layer_2
 
 
 def embedding_net_attention(input_):
@@ -1552,8 +1555,8 @@ class PolicyEstimator():
         sess = sess or tf.get_default_session()
         if config.use_attention_embedding:
             feed_dict = {self.states: states, TEST_X: test_x, keep_prob: 1.0}
-        else:
-            feed_dict = {self.states: states, keep_prob:1.0}  # j, not used
+        # else:
+        #     feed_dict = {self.states: states, keep_prob:1.0}  # j, not used
         return sess.run(self.action_probs, feed_dict)
 
     def update(self, states, test_x, advantages, actions, sess=None):
@@ -1789,23 +1792,24 @@ with tf.Session(config=gpu_config) as sess:
         no_improvement = 0
         loop_action = 0
         num_random_actions = 0
-        for action_index in range(len(action_timers)):  # j, not used/needed
-            action_timers[action_index] = 0.0
+        # for action_index in range(len(action_timers)):  # j, not used/needed
+        #     action_timers[action_index] = 0.0
         for step in range(config.max_rollout_steps):
             start_timer = datetime.datetime.now()
-            if config.use_cyclic_rollout:  # j, not used
-                choices = [1, 3, 4, 5, 8]
-                if no_improvement == len(choices) + 1:
-                    action = 0
-                    no_improvement = 0
-                else:
-                    action = choices[loop_action]
-                    loop_action += 1
-                    if loop_action == len(choices):
-                        loop_action = 0
-            elif config.use_random_rollout:  # j, not used
-                action = random.randint(0, config.num_actions - 1)
-            else:
+            # if config.use_cyclic_rollout:  # j, not used
+            #     choices = [1, 3, 4, 5, 8]
+            #     if no_improvement == len(choices) + 1:
+            #         action = 0
+            #         no_improvement = 0
+            #     else:
+            #         action = choices[loop_action]
+            #         loop_action += 1
+            #         if loop_action == len(choices):
+            #             loop_action = 0
+            # elif config.use_random_rollout:  # j, not used
+            #     action = random.randint(0, config.num_actions - 1)
+            # else:
+            if True:
                 gpu_start_time = datetime.datetime.now()
                 action_probs = policy_estimator.predict([state], [embedded_trip], sess)
                 gpu_inference_time += (datetime.datetime.now() - gpu_start_time).total_seconds()
@@ -1816,38 +1820,38 @@ with tf.Session(config=gpu_config) as sess:
                     action_prob_sum += action_probs[action_prob_index]
                 for action_prob_index in range(len(action_probs)):
                     action_probs[action_prob_index] /= action_prob_sum
-                if config.use_history_action_distribution and (index_sample > 0):  # j, not used. Makes probabilities partly based on past history instead of RL.
-                    history_action_count_sum = 0
-                    for action_count_index in range(len(action_probs)):
-                        history_action_count_sum += count_timers[action_count_index + 1]
-                    for action_count_index in range(len(action_probs)):
-                        history_action_probs[action_count_index] = count_timers[action_count_index + 1]/history_action_count_sum
-                        action_probs[action_count_index] = action_probs[action_count_index]/2 + history_action_probs[action_count_index]/2
+                # if config.use_history_action_distribution and (index_sample > 0):  # j, not used. Makes probabilities partly based on past history instead of RL.
+                #     history_action_count_sum = 0
+                #     for action_count_index in range(len(action_probs)):
+                #         history_action_count_sum += count_timers[action_count_index + 1]
+                #     for action_count_index in range(len(action_probs)):
+                #         history_action_probs[action_count_index] = count_timers[action_count_index + 1]/history_action_count_sum
+                #         action_probs[action_count_index] = action_probs[action_count_index]/2 + history_action_probs[action_count_index]/2
 
 
                 if config.use_rl_loss:
                     states.append(state)
                     trips.append(embedded_trip)
-                elif random.uniform(0, 1) < 0.05:  # j, not used. epsilon greedy?
-                    action_label = [0] * config.num_actions
-                    action_index = 0
-                    min_action_time = sys.maxint
-                    rewards = []
-                    action_times = []
-                    for action_to_label in range(1, config.num_actions):
-                        action_start_time = datetime.datetime.now()
-                        _, reward, _, _, _ = env_step(step, state, problem, min_distance, solution, distance, action_to_label, False)
-                        action_time = (datetime.datetime.now() - action_start_time).total_seconds()
-                        rewards.append(reward)
-                        action_times.append(action_time)
-                        if reward > EPSILON and action_time < min_action_time:
-                            action_index = action_to_label
-                            min_action_time = action_time
-                            break
-                    action_label[action_index] = 1
-                    states.append(state)
-                    trips.append(embedded_trip)
-                    action_labels.append(action_label)
+                # elif random.uniform(0, 1) < 0.05:  # j, not used. epsilon greedy?
+                #     action_label = [0] * config.num_actions
+                #     action_index = 0
+                #     min_action_time = sys.maxint
+                #     rewards = []
+                #     action_times = []
+                #     for action_to_label in range(1, config.num_actions):
+                #         action_start_time = datetime.datetime.now()
+                #         _, reward, _, _, _ = env_step(step, state, problem, min_distance, solution, distance, action_to_label, False)
+                #         action_time = (datetime.datetime.now() - action_start_time).total_seconds()
+                #         rewards.append(reward)
+                #         action_times.append(action_time)
+                #         if reward > EPSILON and action_time < min_action_time:
+                #             action_index = action_to_label
+                #             min_action_time = action_time
+                #             break
+                #     action_label[action_index] = 1
+                #     states.append(state)
+                #     trips.append(embedded_trip)
+                #     action_labels.append(action_label)
 
                 if (config.model_to_restore is not None and should_restart(min_distance, distance, no_improvement)) or no_improvement >= config.max_no_improvement:
                     action = 0
@@ -1907,18 +1911,18 @@ with tf.Session(config=gpu_config) as sess:
             env_act_time += (end_timer - start_timer).total_seconds()
             start_timer = end_timer
 
-        if config.use_random_rollout:  # j, not used
-            temp = np.inf
-            for rollout_step in range(num_checkpoint):
-                current_region_min_step = np.argmin(current_distances[(rollout_step * config.step_interval):((rollout_step + 1) * config.step_interval)]) + rollout_step * config.step_interval
-                current_region_min_distance = min(current_distances[(rollout_step * config.step_interval):((rollout_step + 1) * config.step_interval)])
-                if temp > current_region_min_distance:
-                    distance_record[1, rollout_step] = current_region_min_distance
-                    step_record[1, rollout_step] = current_region_min_step
-                    temp = current_region_min_distance
-                else:
-                    distance_record[1, rollout_step] = distance_record[1, rollout_step - 1]
-                    step_record[1, rollout_step] = step_record[1, rollout_step - 1]
+        # if config.use_random_rollout:  # j, not used
+        #     temp = np.inf
+        #     for rollout_step in range(num_checkpoint):
+        #         current_region_min_step = np.argmin(current_distances[(rollout_step * config.step_interval):((rollout_step + 1) * config.step_interval)]) + rollout_step * config.step_interval
+        #         current_region_min_distance = min(current_distances[(rollout_step * config.step_interval):((rollout_step + 1) * config.step_interval)])
+        #         if temp > current_region_min_distance:
+        #             distance_record[1, rollout_step] = current_region_min_distance
+        #             step_record[1, rollout_step] = current_region_min_step
+        #             temp = current_region_min_distance
+        #         else:
+        #             distance_record[1, rollout_step] = distance_record[1, rollout_step - 1]
+        #             step_record[1, rollout_step] = step_record[1, rollout_step - 1]
 
         start_timer = datetime.datetime.now()
         distances.append(min_distance)
@@ -1927,7 +1931,7 @@ with tf.Session(config=gpu_config) as sess:
             print('solution={}'.format(best_solution))
         else:
             print('invalid solution')
-        if not (config.use_cyclic_rollout or config.use_random_rollout):
+        if True:  # not (config.use_cyclic_rollout or config.use_random_rollout):
             future_best_distances = [0.0] * len(episode)
             future_best_distances[-1] = episode[len(episode) - 1].next_distance
             step = len(episode) - 2

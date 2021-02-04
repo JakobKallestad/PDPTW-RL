@@ -1,0 +1,64 @@
+1489: clever feature.
+1491: location of node before in solution
+1492: location of node after in solution
+...and distances
+(Table 4 in paper Apendix)
+
+1810: probabilities of actions (heuristics)
+
+1818: making sure that the probabilities sum up to one. basic stuff that even I did in my own implementation from the course
+
+1852: decides if model should "restart". sets action to "0", is this the perturbation thing?
+
+1856: Epsilon Greedy happens here :)
+
+1860: In the case that it should not do a random action what should it do? greedy or sample? Default is sample
+
+1861: Uses np.random.choice with p=action probs. This is a good idea. Also notice that action can never be 0 from this, but it can be 0 if it should "restart"
+
+1868: Very important line here. This is the step function and is very familiar from "traditional" RL that I've seen before.
+
+1633: env_step calls env_act
+
+780: Improve solution by action is called. Lets see what it does..
+
+826: Where most of the action ends up. I think there are many variations of similar heuristics that is causing there to be so many actions
+
+For instance action 7:
+- loop over indices i, and j. Different combinations of paths in the solution
+- Then try the action to see if we get an improvement.
+- If yes, then keep going with the same i and j untill no further improvement
+- If no, then continue to next i's and j's
+- repeat
+This is all part of 1 improve_solution by action step. 1587.
+1588: reduces current distance with delta, which is the sum of all the times an improved solution was found by applying the action on the solution for different i's and j's
+smart
+
+1589: Debug mode, could be very useful!
+
+1619: Effect of action on solution. This then counts as a feature to the model for next iterations
+
+1623: Actual distance reduction and a -1 / 1 showing if the action worked or not.
+
+1635: reward is distance - next_distance
+
+1639: action timers record both the number of times the operator was used, and also the time it took to excecute it.
+
+1640: not good for debugging haha...
+
+1893: This was a far as I got this time around... TO BE CONTINUED
+
+1984: just finished calculating rewards and baselines and stuff. moving on to something resembling attention
+
+up to 2011: reporting results and stuff
+
+2023: policy estimator updated, but I didn't quite catch where the "filtered" variables came from.
+
+1565: policy estimator updated. Relatively easy line with little code. I imagine that there is a lot going on underneath.
+
+2029: loss can be added to tensorboard
+
+Then saving model. starting new epoch. When all finished is done.
+
+
+

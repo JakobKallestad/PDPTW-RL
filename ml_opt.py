@@ -1256,10 +1256,10 @@ def reconstruct_solution(problem, existing_solution, step):
             start_customer_index -= 1
             customer_indices[start_customer_index] = customer_index
 
-    if np.random.uniform() < 0.5:
-        while len(solution) == 0:
-            paths_ruined = np.random.choice(candidate_indices, config.num_paths_to_ruin, replace=False)
-            solution = reconstruct_solution_by_exchange(problem, existing_solution, paths_ruined)
+    # if np.random.uniform() < 0.5:
+    #     while len(solution) == 0:
+    #         paths_ruined = np.random.choice(candidate_indices, config.num_paths_to_ruin, replace=False)
+    #         solution = reconstruct_solution_by_exchange(problem, existing_solution, paths_ruined)
     else:
         trip = [0]
         capacity_left = problem.get_capacity(0)
@@ -1329,53 +1329,31 @@ def get_num_points(config):
 
 
 def generate_problem():
-    np.random.seed(config.problem_seed)
-    random.seed(config.problem_seed)
-    config.problem_seed += 1
+    seed = 1235
+    np.random.seed(seed)
+    random.seed(seed)
+    seed += 1
 
-    num_sample_points = get_num_points(config)
-    if config.problem == 'vrp':
-        num_sample_points += 1
+    test_points = 20
+    num_sample_points = test_points + 1
+
+    depot_capacity_map = {
+        10: 20,
+        20: 30,
+        50: 40,
+        100: 50
+    }
+
     locations = np.random.uniform(size=(num_sample_points, 2))
-    # if config.problem == 'vrp':
-    #     if config.depot_positioning == 'C':  # j, not used
-    #         locations[0][0] = 0.5
-    #         locations[0][1] = 0.5
-    #     elif config.depot_positioning == 'E':  # j, not used
-    #         locations[0][0] = 0.0
-    #         locations[0][1] = 0.0
-    #     if config.customer_positioning in {'C', 'RC'}:  # j, not used
-    #         S = np.random.randint(6) + 3
-    #         centers = locations[1 : (S + 1)]
-    #         grid_centers, probabilities = [], []
-    #         for x in range(0, 1000):
-    #             for y in range(0, 1000):
-    #                 grid_center = [(x + 0.5) / 1000.0, (y + 0.5) / 1000.0]
-    #                 p = 0.0
-    #                 for center in centers:
-    #                     distance = calculate_distance(grid_center, center)
-    #                     p += math.exp(-distance * 1000.0 / 40.0)
-    #                 grid_centers.append(grid_center)
-    #                 probabilities.append(p)
-    #         probabilities = np.asarray(probabilities) / np.sum(probabilities)
-    #         if config.customer_positioning in 'C':
-    #             num_clustered_locations = get_num_points(config) - S
-    #         else:
-    #             num_clustered_locations = get_num_points(config) // 2 - S
-    #         grid_indices = np.random.choice(range(len(grid_centers)), num_clustered_locations, p=probabilities)
-    #         for index in range(num_clustered_locations):
-    #             grid_index = grid_indices[index]
-    #             locations[index + S + 1][0] = grid_centers[grid_index][0] + (np.random.uniform() - 0.5) / 1000.0
-    #             locations[index + S + 1][1] = grid_centers[grid_index][1] + (np.random.uniform() - 0.5) / 1000.0
-
-    capacities = get_random_capacities(len(locations))
+    capacities = np.random.randint(1, 10, size=(test_points // 2)).repeat(2)
+    capacities[1::2] *= -1
+    capacities = capacities.tolist()
+    capacities = [depot_capacity_map.get(test_points)] + capacities
     problem = Problem(locations, capacities)
-    np.random.seed(config.problem_seed * 10)
-    random.seed(config.problem_seed * 10)
     return problem
 
 
-ATTENTION_ROLLOUT, LSTM_ROLLOUT = False, True
+ATTENTION_ROLLOUT, LSTM_ROLLOUT = True, False #False, True
 
 
 def embedding_net_nothing(input_):

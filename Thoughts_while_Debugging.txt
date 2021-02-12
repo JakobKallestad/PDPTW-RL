@@ -10,7 +10,7 @@
 
 1852: decides if model should "restart". sets action to "0", is this the perturbation thing?
 
-1856: Epsilon Greedy happens here :)
+1856: Epsilon Greedy happens here
 
 1860: In the case that it should not do a random action what should it do? greedy or sample? Default is sample
 
@@ -27,7 +27,7 @@
 For instance action 7:
 - loop over indices i, and j. Different combinations of paths in the solution
 - Then try the action to see if we get an improvement.
-- If yes, then keep going with the same i and j untill no further improvement
+- If yes, then keep going with the same i and j until no further improvement
 - If no, then continue to next i's and j's
 - repeat
 This is all part of 1 improve_solution by action step. 1587.

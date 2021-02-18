@@ -178,14 +178,14 @@ def calculate_adjusted_distance_between_indices(problem, from_index, to_index):
 
 def calculate_trip_distance(trip):
     sum = 0.0
-    for i in range(len(trip)):
+    for i in range(len(trip)-1):
         sum += calculate_distance(trip[i - 1], trip[i])
     return sum
 
 
 def calculate_path_distance(problem, path):
     sum = 0.0
-    for i in range(1, len(path)):
+    for i in range(1, len(path)-1):  # Changed so no return do depot necessary
         sum += calculate_distance_between_indices(problem, path[i - 1], path[i])
     return sum
 
@@ -198,30 +198,33 @@ def calculate_solution_distance(problem, solution):
 
 
 def validate_solution(problem, solution, distance=None):
-    if config.problem == 'tsp':
-        if len(solution) != 1:
-            return False
+    # if config.problem == 'tsp':
+    #     if len(solution) != 1:
+    #         return False
     visited = [0] * (problem.get_num_customers() + 1)
     for path in solution:
         if path[0] != 0 or path[-1] != 0:
             return False
-        consumption = calculate_consumption(problem, path)
-        if consumption[-2] > problem.get_capacity(path[0]):
+        consumption, max_consumption = calculate_consumption(problem, path, include_max=True)
+        if max_consumption > problem.get_capacity(path[0]):
             return False
-        for customer in path[1:-1]:
+        for customer in path[1:-1]:  # check that it satisfies pdp constraints (only work with single vehicle now)
+            if customer % 2 == 0:  # Delivery node
+                if visited[customer-1] != 1:
+                    return False
             visited[customer] += 1
     for customer in range(1, len(visited)):
         if visited[customer] != 1:
             return False
-    if config.problem == 'tsp':
-        if visited[0] != 0:
-            return False
+    # if config.problem == 'tsp':
+    #     if visited[0] != 0:
+    #         return False
     if distance is not None and math.fabs(distance - calculate_solution_distance(problem, solution)) > EPSILON:
         return False
     return True
 
 
-def two_opt(trip, first, second):
+def two_opt(trip, first, second):  # very unlikely to work with pdp
     new_trip = copy.deepcopy(trip)
     if first > second:
         first, second = second, first
@@ -235,7 +238,7 @@ def two_opt(trip, first, second):
     return new_trip
 
 
-def apply_two_opt(trip, distance, top_indices_eval, offset=0):
+def apply_two_opt(trip, distance, top_indices_eval, offset=0):  # same
     #TODO(xingwen): this implementation is very inefficient.
     n = len(trip)
     top_indices = top_indices_eval[0]
@@ -258,7 +261,7 @@ def apply_two_opt(trip, distance, top_indices_eval, offset=0):
         return trip, distance
 
 
-def two_exchange(trip):
+def two_exchange(trip): # Very unlikely to work with pdp
     n = len(trip)
     min_delta = -1e-6
     min_first, min_second = None, None
@@ -289,7 +292,7 @@ def two_exchange(trip):
         return new_trip, calculate_trip_distance(new_trip)
 
 
-def relocate(trip):
+def relocate(trip):  # needs major redesign for pdp
     n = len(trip)
     min_delta = -1e-6
     min_first, min_second = None, None
@@ -324,7 +327,7 @@ def relocate(trip):
         return new_trip, calculate_trip_distance(new_trip)
 
 
-def mutate(trip):
+def mutate(trip):  # Helper for 2opt
     n = len(trip)
     min = -1e-6
     label = None
@@ -344,7 +347,7 @@ def mutate(trip):
         return two_opt(trip, label[0], label[1]), min, label
 
 
-def do_two_opt_path(path, first, second):
+def do_two_opt_path(path, first, second):  # Helper for two_opt_path
     improved_path = copy.deepcopy(path)
     first = first + 1
     while first < second:
@@ -354,7 +357,7 @@ def do_two_opt_path(path, first, second):
     return improved_path
 
 
-def two_opt_path(problem, path):
+def two_opt_path(problem, path):  # New and more efficent 2opt compared to the other one? Use this instead? Or simply the one that works with more routes?
     n = len(path) - 1
     min_delta = -EPSILON
     label = None
@@ -365,7 +368,23 @@ def two_opt_path(problem, path):
             after = calculate_distance_between_indices(problem, path[first], path[second]) \
                     + calculate_distance_between_indices(problem, path[first + 1], path[second + 1])
             delta = after - before
-            if delta < min_delta:
+
+            new_path = do_two_opt_path(path, first, second)  # Extra checks by Jakob, but SLOW!
+            visited = [False] * len(path)
+            feasible = True
+            current_cap = 0
+            max_cap = problem.get_capacity(path[0])
+            for node in new_path[1:-1]:
+                current_cap += problem.get_capacity(node)
+                if current_cap > max_cap:
+                    feasible = False
+
+                if node % 2 == 0 and not visited[node-1]:
+                    feasible = False
+                else:
+                    visited[node] = True
+
+            if delta < min_delta and feasible:
                 min_delta = delta
                 label = first, second
     if label is None:
@@ -380,7 +399,7 @@ def do_exchange_path(path, first, second):
     return improved_path
 
 
-def exchange_path(problem, path):
+def exchange_path(problem, path):  # seems quite efficent. Probably won't work, but neither will it normally. Problem is calls being split between routes, but doesn't matter when only one route.
     n = len(path) - 1
     min_delta = -EPSILON
     label = None
@@ -401,7 +420,23 @@ def exchange_path(problem, path):
                      + calculate_distance_between_indices(problem, path[second - 1], path[first]) \
                      + calculate_distance_between_indices(problem, path[first], path[second + 1])
             delta = after - before
-            if delta < min_delta:
+
+            new_path = do_exchange_path(path, first, second)  # Extra checks by Jakob, but SLOW!
+            visited = [False] * len(path)
+            feasible = True
+            current_cap = 0
+            max_cap = problem.get_capacity(path[0])
+            for node in new_path[1:-1]:
+                current_cap += problem.get_capacity(node)
+                if current_cap > max_cap:
+                    feasible = False
+
+                if node % 2 == 0 and not visited[node-1]:
+                    feasible = False
+                else:
+                    visited[node] = True
+
+            if delta < min_delta and feasible:
                 min_delta = delta
                 label = first, second
     if label is None:
@@ -418,7 +453,7 @@ def do_relocate_path(path, first, first_tail, second):
     return improved_path[:(second + 1)] + segment + improved_path[(second + 1):]
 
 
-def relocate_path(problem, path, exact_length=1):
+def relocate_path(problem, path, exact_length=1):  # same potentiall problem as with exchange_path
     n = len(path) - 1
     min_delta = -EPSILON
     label = None
@@ -434,7 +469,23 @@ def relocate_path(problem, path, exact_length=1):
                     + calculate_distance_between_indices(problem, path[second], path[first]) \
                     + calculate_distance_between_indices(problem, path[first_tail], path[second + 1])
             delta = after - before
-            if delta < min_delta:
+
+            new_path = do_relocate_path(path, first, first_tail, second) # Extra checks by Jakob, but SLOW!
+            visited = [False] * len(path)
+            feasible = True
+            current_cap = 0
+            max_cap = problem.get_capacity(path[0])
+            for node in new_path[1:-1]:
+                current_cap += problem.get_capacity(node)
+                if current_cap > max_cap:
+                    feasible = False
+
+                if node % 2 == 0 and not visited[node-1]:
+                    feasible = False
+                else:
+                    visited[node] = True
+
+            if delta < min_delta and feasible:  # Extra constraint
                 min_delta = delta
                 label = first, first_tail, second
     if label is None:
@@ -443,21 +494,26 @@ def relocate_path(problem, path, exact_length=1):
         return do_relocate_path(path, label[0], label[1], label[2]), min_delta, label
 
 
-def calculate_consumption(problem, path):
+def calculate_consumption(problem, path, include_max=False):
     n = len(path)
     consumption = [0] * n
     consumption[0] = 0
+    max_consumption = 0
     for i in range(1, n - 1):
         consumption[i] = consumption[i - 1] + problem.get_capacity(path[i])
+        max_consumption = max(max_consumption, consumption[i])  # EDIT: Jakob
     consumption[n - 1] = consumption[n - 2]
-    return consumption
+    if include_max:
+        return consumption, max_consumption
+    else:
+        return consumption
 
 
 def do_cross_two_paths(path_first, path_second, first, second):
     return path_first[:(first + 1)] + path_second[(second + 1):], path_second[:(second + 1)] + path_first[(first + 1):]
 
 
-def cross_two_paths(problem, path_first, path_second):
+def cross_two_paths(problem, path_first, path_second):  # Can mix up pickup and delivery calls.
     n_first = len(path_first) - 1
     n_second = len(path_second) - 1
     min_delta = -EPSILON
@@ -753,7 +809,7 @@ def improve_solution(problem, solution):
     return improved_solution, all_delta
 
 
-def  get_exact_lengths_for_exchange_two_paths(action):
+def get_exact_lengths_for_exchange_two_paths(action):
     if action in [5, 6, 7]:
         return [action - 4, action - 4]
     elif action in range(12, 25):
@@ -787,9 +843,9 @@ def improve_solution_by_action(step, problem, solution, action):
             modified = problem.should_try(action, path_index)
             while modified:
                 if action == 1:
-                    improved_path, delta, label = two_opt_path(problem, improved_solution[path_index])
+                    improved_path, delta, label = two_opt_path(problem, improved_solution[path_index]) # Potential infeasibility source, fixed but slow
                 elif action == 2:
-                    improved_path, delta, label = exchange_path(problem, improved_solution[path_index])
+                    improved_path, delta, label = exchange_path(problem, improved_solution[path_index]) # Potential infeasibility source, fixed but slow
                 else:
                     exact_lengths = {
                         3: 1,
@@ -935,10 +991,10 @@ def get_random_capacities(n):
     capacities = [0] * n
     if config.problem == 'vrp':
         depot_capacity_map = {
-            10: 20,
-            20: 30,
-            50: 40,
-            100: 50
+            10: 10,  # 20., I divided by 2 from original because there are fewer calls that is picked up.
+            20: 15,  # 30.
+            50: 20,  # 40.
+            100: 25  # 50.
         }
         capacities[0] = depot_capacity_map.get(n - 1, 50)
         for i in range(1, n):
@@ -1116,66 +1172,68 @@ def construct_solution(problem, existing_solution=None, step=0):
                     solution_to_return = reconstructed_solution
         return solution_to_return
     else:
-        start_customer_index = 1
-
-    trip = [0]
-    capacity_left = problem.get_capacity(0)
-    i = start_customer_index
-    while i <= n:
-        random_index = np.random.randint(low=i, high=n+1)
-
-        # if len(trip) > 1:
-        #     min_index, min_distance = random_index, float('inf')
-        #     for j in range(i, n + 1):
-        #         if problem.get_capacity(customer_indices[j]) > capacity_left:
-        #             continue
-        #         distance = calculate_distance_between_indices(problem, trip[-1], customer_indices[j])
-        #         if distance < min_distance:
-        #             min_index, min_distance = j, distance
-        #     random_index = min_index
-
-        # if len(trip) > 1:
-        #     min_index, min_distance = 0, calculate_adjusted_distance_between_indices(problem, trip[-1], 0)
-        # else:
-        #     min_index, min_distance = random_index, float('inf')
-        # for j in range(i, n + 1):
-        #     if problem.get_capacity(customer_indices[j]) > capacity_left:
-        #         continue
-        #     distance = calculate_adjusted_distance_between_indices(problem, trip[-1], customer_indices[j])
-        #     if distance < min_distance:
-        #         min_index, min_distance = j, distance
-        # random_index = min_index
-
-        to_indices = []
-        adjusted_distances = []
-        # if len(trip) > 1:
-        #     to_indices.append(0)
-        #     adjusted_distances.append(calculate_adjusted_distance_between_indices(problem, trip[-1], 0))
-        for j in range(i, n + 1):
-            if problem.get_capacity(customer_indices[j]) > capacity_left:
-                continue
-            to_indices.append(j)
-            adjusted_distances.append(calculate_adjusted_distance_between_indices(problem, trip[-1], customer_indices[j]))
-        random_index = sample_next_index(to_indices, adjusted_distances)
-
-        if random_index == 0 or capacity_left < problem.get_capacity(customer_indices[random_index]):
-            trip.append(0)
-            solution.append(trip)
-            trip = [0]
-            capacity_left = problem.get_capacity(0)
-            continue
-        customer_indices = list(customer_indices)  # EDIT Jakob
-        customer_indices[i], customer_indices[random_index] = customer_indices[random_index], customer_indices[i]
-        trip.append(customer_indices[i])
-        capacity_left -= problem.get_capacity(customer_indices[i])
-        i += 1
-    if len(trip) > 1:
-        trip.append(0)
-        solution.append(trip)
-    solution.append([0, 0])
-
-    problem.reset_change_at_and_no_improvement_at()
-    return solution
+        problem.reset_change_at_and_no_improvement_at()
+        return [list(range(21)) + [0], [0, 0]]
+    #     start_customer_index = 1
+    #
+    # trip = [0]
+    # capacity_left = problem.get_capacity(0)
+    # i = start_customer_index
+    # while i <= n:
+    #     random_index = np.random.randint(low=i, high=n+1)
+    #
+    #     # if len(trip) > 1:
+    #     #     min_index, min_distance = random_index, float('inf')
+    #     #     for j in range(i, n + 1):
+    #     #         if problem.get_capacity(customer_indices[j]) > capacity_left:
+    #     #             continue
+    #     #         distance = calculate_distance_between_indices(problem, trip[-1], customer_indices[j])
+    #     #         if distance < min_distance:
+    #     #             min_index, min_distance = j, distance
+    #     #     random_index = min_index
+    #
+    #     # if len(trip) > 1:
+    #     #     min_index, min_distance = 0, calculate_adjusted_distance_between_indices(problem, trip[-1], 0)
+    #     # else:
+    #     #     min_index, min_distance = random_index, float('inf')
+    #     # for j in range(i, n + 1):
+    #     #     if problem.get_capacity(customer_indices[j]) > capacity_left:
+    #     #         continue
+    #     #     distance = calculate_adjusted_distance_between_indices(problem, trip[-1], customer_indices[j])
+    #     #     if distance < min_distance:
+    #     #         min_index, min_distance = j, distance
+    #     # random_index = min_index
+    #
+    #     to_indices = []
+    #     adjusted_distances = []
+    #     # if len(trip) > 1:
+    #     #     to_indices.append(0)
+    #     #     adjusted_distances.append(calculate_adjusted_distance_between_indices(problem, trip[-1], 0))
+    #     for j in range(i, n + 1):
+    #         if problem.get_capacity(customer_indices[j]) > capacity_left:
+    #             continue
+    #         to_indices.append(j)
+    #         adjusted_distances.append(calculate_adjusted_distance_between_indices(problem, trip[-1], customer_indices[j]))
+    #     random_index = sample_next_index(to_indices, adjusted_distances)
+    #
+    #     if random_index == 0 or capacity_left < problem.get_capacity(customer_indices[random_index]):
+    #         trip.append(0)
+    #         solution.append(trip)
+    #         trip = [0]
+    #         capacity_left = problem.get_capacity(0)
+    #         continue
+    #     customer_indices = list(customer_indices)  # EDIT Jakob
+    #     customer_indices[i], customer_indices[random_index] = customer_indices[random_index], customer_indices[i]
+    #     trip.append(customer_indices[i])
+    #     capacity_left -= problem.get_capacity(customer_indices[i])
+    #     i += 1
+    # if len(trip) > 1:
+    #     trip.append(0)
+    #     solution.append(trip)
+    # solution.append([0, 0])
+    #
+    # problem.reset_change_at_and_no_improvement_at()
+    # return solution
 
 def reconstruct_solution_by_exchange(problem, existing_solution, paths_ruined):
     path0 = copy.deepcopy(existing_solution[paths_ruined[0]])
@@ -1196,129 +1254,130 @@ def reconstruct_solution_by_exchange(problem, existing_solution, paths_ruined):
 
 
 def reconstruct_solution(problem, existing_solution, step):
-    distance_hash = round(calculate_solution_distance(problem, existing_solution) * 1e6)
-    # if config.detect_negative_cycle and distance_hash not in problem.distance_hashes:
-    #     problem.add_distance_hash(distance_hash)
-    #     positive_cycles = []
-    #     cycle_selected = None
-    #     for capacity in range(1, 10):
-    #         # TODO: relax the requirement of ==capacity
-    #         # TODO: caching, sparsify
-    #         graph = construct_graph(problem, existing_solution, capacity)
-    #         negative_cycle, flag = graph.find_negative_cycle()
-    #         if negative_cycle:
-    #             if flag == -1.0:
-    #                 cycle_selected = negative_cycle
-    #                 break
-    #             else:
-    #                 positive_cycles.append(negative_cycle)
-    #     if cycle_selected is None and len(positive_cycles) > 0:
-    #         index = np.random.choice(range(len(positive_cycles)), 1)[0]
-    #         cycle_selected = positive_cycles[index]
-    #     if cycle_selected is not None:
-    #             negative_cycle = cycle_selected
-    #             improved_solution = copy.deepcopy(existing_solution)
-    #             customers = []
-    #             for pair in negative_cycle:
-    #                 path_index, node_index = pair[0], pair[1]
-    #                 customers.append(improved_solution[path_index][node_index])
-    #             customers = [customers[-1]] + customers[:-1]
-    #             for index in range(len(negative_cycle)):
-    #                 pair = negative_cycle[index]
-    #                 path_index, node_index = pair[0], pair[1]
-    #                 improved_solution[path_index][node_index] = customers[index]
-    #                 problem.mark_change_at(step, [path_index])
-    #             # if not validate_solution(problem, improved_solution):
-    #             #     print('existing_solution={}, invalid improved_solution={}, negative_cycle={}'.format(
-    #             #         existing_solution, improved_solution, negative_cycle))
-    #             # else:
-    #             #     print('cost={}, negative_cycle={}'.format(
-    #             #         calculate_solution_distance(problem, improved_solution) - calculate_solution_distance(problem, existing_solution),
-    #             #         negative_cycle)
-    #             #     )
-    #             return improved_solution
-
-    solution = []
-    n = problem.get_num_customers()
-    customer_indices = list(range(n + 1)) # EDIT JAKOB
-
-    candidate_indices = []
-    for path_index in range(len(existing_solution)):
-        if len(existing_solution[path_index]) > 2:
-            candidate_indices.append(path_index)
-    paths_ruined = np.random.choice(candidate_indices, config.num_paths_to_ruin, replace=False)
-    start_customer_index = n + 1
-    for path_index in paths_ruined:
-        path = existing_solution[path_index]
-        for customer_index in path:
-            if customer_index == 0:
-                continue
-            start_customer_index -= 1
-            customer_indices[start_customer_index] = customer_index
-
-    # if np.random.uniform() < 0.5:
-    #     while len(solution) == 0:
-    #         paths_ruined = np.random.choice(candidate_indices, config.num_paths_to_ruin, replace=False)
-    #         solution = reconstruct_solution_by_exchange(problem, existing_solution, paths_ruined)
-    else:
-        trip = [0]
-        capacity_left = problem.get_capacity(0)
-        i = start_customer_index
-        while i <= n:
-            to_indices = []
-            adjusted_distances = []
-            # if len(trip) > 1:
-            #     to_indices.append(0)
-            #     adjusted_distances.append(calculate_adjusted_distance_between_indices(problem, trip[-1], 0))
-            for j in range(i, n + 1):
-                if problem.get_capacity(customer_indices[j]) > capacity_left:
-                    continue
-                to_indices.append(j)
-                adjusted_distances.append(
-                    calculate_adjusted_distance_between_indices(problem, trip[-1], customer_indices[j]))
-            random_index = sample_next_index(to_indices, adjusted_distances)
-
-            if random_index == 0:
-                trip.append(0)
-                solution.append(trip)
-                trip = [0]
-                capacity_left = problem.get_capacity(0)
-                continue
-            customer_indices[i], customer_indices[random_index] = customer_indices[random_index], customer_indices[i]
-            trip.append(customer_indices[i])
-            capacity_left -= problem.get_capacity(customer_indices[i])
-            i += 1
-        if len(trip) > 1:
-            trip.append(0)
-            solution.append(trip)
-
-    while len(solution) < len(paths_ruined):
-        solution.append([0, 0])
-    improved_solution = copy.deepcopy(existing_solution)
-    solution_index = 0
-    for path_index in sorted(paths_ruined):
-        improved_solution[path_index] = copy.deepcopy(solution[solution_index])
-        solution_index += 1
-    problem.mark_change_at(step, paths_ruined)
-    for solution_index in range(len(paths_ruined), len(solution)):
-        improved_solution.append(copy.deepcopy(solution[solution_index]))
-        problem.mark_change_at(step, [len(improved_solution) - 1])
-
-    has_seen_empty_path = False
-    for path_index in range(len(improved_solution)):
-        if len(improved_solution[path_index]) == 2:
-            if has_seen_empty_path:
-                empty_slot_index = path_index
-                for next_path_index in range(path_index + 1, len(improved_solution)):
-                    if len(improved_solution[next_path_index]) > 2:
-                        improved_solution[empty_slot_index] = copy.deepcopy(improved_solution[next_path_index])
-                        empty_slot_index += 1
-                improved_solution = improved_solution[:empty_slot_index]
-                problem.mark_change_at(step, range(path_index, empty_slot_index))
-                break
-            else:
-                has_seen_empty_path = True
-    return improved_solution
+    return [list(range(21)) + [0], [0, 0]]  # Simple fix for now.
+    # distance_hash = round(calculate_solution_distance(problem, existing_solution) * 1e6)
+    # # if config.detect_negative_cycle and distance_hash not in problem.distance_hashes:
+    # #     problem.add_distance_hash(distance_hash)
+    # #     positive_cycles = []
+    # #     cycle_selected = None
+    # #     for capacity in range(1, 10):
+    # #         # TODO: relax the requirement of ==capacity
+    # #         # TODO: caching, sparsify
+    # #         graph = construct_graph(problem, existing_solution, capacity)
+    # #         negative_cycle, flag = graph.find_negative_cycle()
+    # #         if negative_cycle:
+    # #             if flag == -1.0:
+    # #                 cycle_selected = negative_cycle
+    # #                 break
+    # #             else:
+    # #                 positive_cycles.append(negative_cycle)
+    # #     if cycle_selected is None and len(positive_cycles) > 0:
+    # #         index = np.random.choice(range(len(positive_cycles)), 1)[0]
+    # #         cycle_selected = positive_cycles[index]
+    # #     if cycle_selected is not None:
+    # #             negative_cycle = cycle_selected
+    # #             improved_solution = copy.deepcopy(existing_solution)
+    # #             customers = []
+    # #             for pair in negative_cycle:
+    # #                 path_index, node_index = pair[0], pair[1]
+    # #                 customers.append(improved_solution[path_index][node_index])
+    # #             customers = [customers[-1]] + customers[:-1]
+    # #             for index in range(len(negative_cycle)):
+    # #                 pair = negative_cycle[index]
+    # #                 path_index, node_index = pair[0], pair[1]
+    # #                 improved_solution[path_index][node_index] = customers[index]
+    # #                 problem.mark_change_at(step, [path_index])
+    # #             # if not validate_solution(problem, improved_solution):
+    # #             #     print('existing_solution={}, invalid improved_solution={}, negative_cycle={}'.format(
+    # #             #         existing_solution, improved_solution, negative_cycle))
+    # #             # else:
+    # #             #     print('cost={}, negative_cycle={}'.format(
+    # #             #         calculate_solution_distance(problem, improved_solution) - calculate_solution_distance(problem, existing_solution),
+    # #             #         negative_cycle)
+    # #             #     )
+    # #             return improved_solution
+    #
+    # solution = []
+    # n = problem.get_num_customers()
+    # customer_indices = list(range(n + 1)) # EDIT JAKOB
+    #
+    # candidate_indices = []
+    # for path_index in range(len(existing_solution)):
+    #     if len(existing_solution[path_index]) > 2:
+    #         candidate_indices.append(path_index)
+    # paths_ruined = np.random.choice(candidate_indices, config.num_paths_to_ruin, replace=False)
+    # start_customer_index = n + 1
+    # for path_index in paths_ruined:
+    #     path = existing_solution[path_index]
+    #     for customer_index in path:
+    #         if customer_index == 0:
+    #             continue
+    #         start_customer_index -= 1
+    #         customer_indices[start_customer_index] = customer_index
+    #
+    # # if np.random.uniform() < 0.5:
+    # #     while len(solution) == 0:
+    # #         paths_ruined = np.random.choice(candidate_indices, config.num_paths_to_ruin, replace=False)
+    # #         solution = reconstruct_solution_by_exchange(problem, existing_solution, paths_ruined)
+    # else:
+    #     trip = [0]
+    #     capacity_left = problem.get_capacity(0)
+    #     i = start_customer_index
+    #     while i <= n:
+    #         to_indices = []
+    #         adjusted_distances = []
+    #         # if len(trip) > 1:
+    #         #     to_indices.append(0)
+    #         #     adjusted_distances.append(calculate_adjusted_distance_between_indices(problem, trip[-1], 0))
+    #         for j in range(i, n + 1):
+    #             if problem.get_capacity(customer_indices[j]) > capacity_left:
+    #                 continue
+    #             to_indices.append(j)
+    #             adjusted_distances.append(
+    #                 calculate_adjusted_distance_between_indices(problem, trip[-1], customer_indices[j]))
+    #         random_index = sample_next_index(to_indices, adjusted_distances)
+    #
+    #         if random_index == 0:
+    #             trip.append(0)
+    #             solution.append(trip)
+    #             trip = [0]
+    #             capacity_left = problem.get_capacity(0)
+    #             continue
+    #         customer_indices[i], customer_indices[random_index] = customer_indices[random_index], customer_indices[i]
+    #         trip.append(customer_indices[i])
+    #         capacity_left -= problem.get_capacity(customer_indices[i])
+    #         i += 1
+    #     if len(trip) > 1:
+    #         trip.append(0)
+    #         solution.append(trip)
+    #
+    # while len(solution) < len(paths_ruined):
+    #     solution.append([0, 0])
+    # improved_solution = copy.deepcopy(existing_solution)
+    # solution_index = 0
+    # for path_index in sorted(paths_ruined):
+    #     improved_solution[path_index] = copy.deepcopy(solution[solution_index])
+    #     solution_index += 1
+    # problem.mark_change_at(step, paths_ruined)
+    # for solution_index in range(len(paths_ruined), len(solution)):
+    #     improved_solution.append(copy.deepcopy(solution[solution_index]))
+    #     problem.mark_change_at(step, [len(improved_solution) - 1])
+    #
+    # has_seen_empty_path = False
+    # for path_index in range(len(improved_solution)):
+    #     if len(improved_solution[path_index]) == 2:
+    #         if has_seen_empty_path:
+    #             empty_slot_index = path_index
+    #             for next_path_index in range(path_index + 1, len(improved_solution)):
+    #                 if len(improved_solution[next_path_index]) > 2:
+    #                     improved_solution[empty_slot_index] = copy.deepcopy(improved_solution[next_path_index])
+    #                     empty_slot_index += 1
+    #             improved_solution = improved_solution[:empty_slot_index]
+    #             problem.mark_change_at(step, range(path_index, empty_slot_index))
+    #             break
+    #         else:
+    #             has_seen_empty_path = True
+    # return improved_solution
 
 
 def get_num_points(config):
@@ -1338,10 +1397,10 @@ def generate_problem():
     num_sample_points = test_points + 1
 
     depot_capacity_map = {
-        10: 20,
-        20: 30,
-        50: 40,
-        100: 50
+        10: 10,  # 20,
+        20: 15,  # 30,
+        50: 20,  # 40,
+        100: 25,  # 50
     }
 
     locations = np.random.uniform(size=(num_sample_points, 2))

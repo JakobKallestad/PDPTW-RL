@@ -2,11 +2,9 @@ import numpy as np
 import random
 import copy
 import math
-
-def calculate_distance(point0, point1):
-    dx = point1[0] - point0[0]
-    dy = point1[1] - point0[1]
-    return math.sqrt(dx * dx + dy * dy)
+import numpy as np
+from Utils import distance
+import pickle
 
 class Problem:
     def __init__(self, locations, capacities):

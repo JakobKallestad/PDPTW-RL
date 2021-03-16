@@ -145,7 +145,6 @@ def insert_tour(pdp, solution, removed_calls):
         temp_sol.insert(ij[1], i_call * 2)
 
     ind = check_best_tour_spot(pdp, solution, temp_sol)
-    assert ind is not None
     new_solution = solution[:ind] + temp_sol + solution[ind:]
     cost = objective_function(pdp, new_solution)
     #assert cost != float('inf')

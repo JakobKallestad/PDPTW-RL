@@ -1,2 +1,6 @@
-model_checkpoint_path: "rollout_model_500_0_20000.ckpt"
-all_model_checkpoint_paths: "rollout_model_500_0_20000.ckpt"
+model_checkpoint_path: "logs_30_model_500_6.ckpt"
+all_model_checkpoint_paths: "logs_30_model_100_6.ckpt"
+all_model_checkpoint_paths: "logs_30_model_200_6.ckpt"
+all_model_checkpoint_paths: "logs_30_model_300_6.ckpt"
+all_model_checkpoint_paths: "logs_30_model_400_6.ckpt"
+all_model_checkpoint_paths: "logs_30_model_500_6.ckpt"

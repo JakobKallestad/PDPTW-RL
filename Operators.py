@@ -9,6 +9,7 @@ def remove_insert(pdp, solution, op):
     solution = copy.copy(solution)
     op, op2 = op
     solution, removed_calls = op(pdp, solution)
+    #print(*(r for r in removed_calls))
     if removed_calls == [None]:
         new_solution, new_cost = insert_single_best(pdp, solution)
     else:
@@ -20,7 +21,8 @@ def remove_insert(pdp, solution, op):
 # ==================================================================================================================
 
 def remove_calls(solution, r_calls):
-    temp_solution = [e for e in solution if math.ceil(e/2) not in r_calls]
+    r_calls_set = set(r_calls)
+    temp_solution = [e for e in solution if math.ceil(e/2) not in r_calls_set]
     return temp_solution, r_calls
 
 
@@ -34,7 +36,7 @@ def remove_close_calls(pdp, solution):
     len_dist_set = len(dist_set)
     ind = random.randint(0, len_dist_set-1)
     ds = dist_set[ind]
-    remove_calls(solution, set(ds))
+    remove_calls(solution, ds)
 
 
 def remove_longest_tour_deviation(pdp, solution):
@@ -47,7 +49,8 @@ def remove_longest_tour_deviation(pdp, solution):
         tour_deviation.append((e, a+b-c))
     tour_deviation = sorted(tour_deviation, key=lambda x: x[1])
     n_remove = random.randint(min(pdp.n_calls, 2), min(pdp.n_calls, 5))
-    r_calls = set([math.ceil(x[0]/2) for x in tour_deviation[:n_remove]])
+    r_calls = list(dict.fromkeys([math.ceil(x[0]/2) for x in tour_deviation[:n_remove]]))
+    random.shuffle(r_calls)
     return remove_calls(solution, r_calls)
 
 
@@ -56,32 +59,33 @@ def remove_tour_neighbors(pdp, solution):
     len_remove_segment = random.randint(min(len_solution, 2), min(len_solution, 5))
     start_segment = random.randint(0, len_solution-len_remove_segment)
     remove_segment = solution[start_segment:start_segment+len_remove_segment]
-    r_calls = set([math.ceil(r/2) for r in remove_segment])
+    r_calls = list(dict.fromkeys([math.ceil(r/2) for r in remove_segment]))
+    random.shuffle(r_calls)
     return remove_calls(solution, r_calls)
 
 
 def remove_xs(pdp, solution):
-    r_calls = set(random.sample(range(1, pdp.n_calls + 1), random.randint(min(pdp.n_calls, 2), min(pdp.n_calls, 5))))
+    r_calls = random.sample(range(1, pdp.n_calls + 1), random.randint(min(pdp.n_calls, 2), min(pdp.n_calls, 5)))
     return remove_calls(solution, r_calls)
 
 
 def remove_s(pdp, solution):
-    r_calls = set(random.sample(range(1, pdp.n_calls + 1), random.randint(min(pdp.n_calls, 5), min(pdp.n_calls, 10))))
+    r_calls = random.sample(range(1, pdp.n_calls + 1), random.randint(min(pdp.n_calls, 5), min(pdp.n_calls, 10)))
     return remove_calls(solution, r_calls)
 
 
 def remove_m(pdp, solution):
-    r_calls = set(random.sample(range(1, pdp.n_calls + 1), random.randint(min(pdp.n_calls, 10), min(pdp.n_calls, 20))))
+    r_calls = random.sample(range(1, pdp.n_calls + 1), random.randint(min(pdp.n_calls, 10), min(pdp.n_calls, 20)))
     return remove_calls(solution, r_calls)
 
 
 def remove_l(pdp, solution):
-    r_calls = set(random.sample(range(1, pdp.n_calls + 1), random.randint(min(pdp.n_calls, 20), min(pdp.n_calls, 30))))
+    r_calls = random.sample(range(1, pdp.n_calls + 1), random.randint(min(pdp.n_calls, 20), min(pdp.n_calls, 30)))
     return remove_calls(solution, r_calls)
 
 
 def remove_xl(pdp, solution):
-    r_calls = set(random.sample(range(1, pdp.n_calls + 1), random.randint(min(pdp.n_calls, 30), min(pdp.n_calls, 40))))
+    r_calls = random.sample(range(1, pdp.n_calls + 1), random.randint(min(pdp.n_calls, 30), min(pdp.n_calls, 40)))
     return remove_calls(solution, r_calls)
 
 
@@ -95,8 +99,6 @@ def insert_first(pdp, solution, removed_calls):
         solution.insert(ij[0], i_call*2-1)
         solution.insert(ij[1], i_call*2)
     cost = objective_function(pdp, solution)
-    #assert cost != float('inf')
-    #assert len(solution) == 50
     return solution, cost
 
 
@@ -106,8 +108,6 @@ def insert_greedy(pdp, solution, removed_calls):
         solution.insert(ij[0], i_call*2-1)
         solution.insert(ij[1], i_call*2)
     cost = objective_function(pdp, solution)
-    #assert cost != float('inf')
-    #assert len(solution) == 50
     return solution, cost
 
 
@@ -131,9 +131,6 @@ def insert_beam_search(pdp, solution, removed_calls, beam_width=10, search_width
 
     solution, cost = beam[0]
     cost2 = objective_function(pdp, solution)
-    #assert round(cost, 5) == round(cost2, 5)
-    #assert cost != float('inf')
-    #assert len(solution) == 50
     return solution, cost2
 
 
@@ -145,10 +142,9 @@ def insert_tour(pdp, solution, removed_calls):
         temp_sol.insert(ij[1], i_call * 2)
 
     ind = check_best_tour_spot(pdp, solution, temp_sol)
+    assert ind is not None
     new_solution = solution[:ind] + temp_sol + solution[ind:]
     cost = objective_function(pdp, new_solution)
-    #assert cost != float('inf')
-    #assert len(new_solution) == 50
     return new_solution, cost
 
 
@@ -165,6 +161,5 @@ def insert_single_best(pdp, solution):
     solution = [e for e in solution if math.ceil(e/2) != best_change[0]]
     solution.insert(best_change[1], best_change[0]*2-1)
     solution.insert(best_change[2], best_change[0]*2)
-    # assert cost != float('inf')
-    #assert len(solution) == 50
-    return solution, min_cost
+    cost = objective_function(pdp, solution)
+    return solution, cost

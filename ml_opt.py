@@ -21,7 +21,7 @@ from Operators import remove_insert, remove_single_best, remove_longest_tour_dev
 
 EPSILON = 1e-6
 
-logs_number = 'logs_31'
+logs_number = 'logs_35'
 writer = SummaryWriter(logs_number)
 
 def str2bool(v):
@@ -72,7 +72,7 @@ def get_config(args=None):
     parser.add_argument('--max_num_training_epsisodes', type=int, default=10000000, help="")
 
     parser.add_argument('--dataset_from_file', type=str, default=None, help='')
-    # --model_to_restore logs_30_model_500_6.ckpt --dataset_from_file data/pdp_100/seed1234_size100_num100.pkl
+    # --model_to_restore logs_32_model_200_6.ckpt --dataset_from_file data/pdp_100/seed1234_size100_num100.pkl
 
     config = parser.parse_args(args)
     return config
@@ -327,18 +327,18 @@ def env_step(step, state, pdp, min_distance, solution, distance, action, record_
     start_timer = datetime.datetime.now()
     new_solution, next_distance = env_act(pdp, solution, action)
 
+    next_state = env_generate_state(min_distance, state, action, distance, next_distance)
+    reward = distance - next_distance
+
     # Using SA for acceptance criteria
     d_E = next_distance - distance
-    if d_E < 0:
+    if d_E < 0 or action == 0:
         solution = new_solution
     elif next_distance < float('inf') and random.random() < math.e ** (-d_E / T):
         solution = new_solution
     else:
-        pass
-        # next_distance = distance
+        next_distance = distance
 
-    next_state = env_generate_state(min_distance, state, action, distance, next_distance)
-    reward = distance - next_distance
     end_timer = datetime.datetime.now()
     if record_time:
         action_timers[action * 2] += 1
@@ -388,7 +388,7 @@ with tf.Session(config=gpu_config) as sess:
 
         # SA:
         T_0 = 5
-        alpha = 0.98#0.993
+        alpha = 0.993
         T = T_0
 
         states = []
@@ -404,7 +404,7 @@ with tf.Session(config=gpu_config) as sess:
             pdp = dataset[index_sample]
         else:
             pdp = generate_problem(size=config.num_training_points)
-        pdp.initialize_close_calls()
+        #pdp.initialize_close_calls()
         solution = construct_solution(pdp)
         best_solution = copy.copy(solution)
 
@@ -446,11 +446,11 @@ with tf.Session(config=gpu_config) as sess:
             states.append(state)
             trips.append(embedded_trip)
 
-            if config.model_to_restore is "NOT PERTURBING" and no_improvement >= config.max_no_improvement:  #(config.model_to_restore is not None and should_restart(min_distance, distance, no_improvement)) or no_improvement >= config.max_no_improvement:
+            if config.model_to_restore is "None" and no_improvement >= config.max_no_improvement:  #(config.model_to_restore is not None and should_restart(min_distance, distance, no_improvement)) or no_improvement >= config.max_no_improvement:
                 action = 0
                 no_improvement = 0
             else:
-                if config.model_to_restore is "NOT EP GREEDY" and np.random.uniform() < config.epsilon_greedy:
+                if config.model_to_restore is "None" and np.random.uniform() < config.epsilon_greedy:
                     action = np.random.randint(config.num_actions - 1) + 1
                     num_random_actions += 1
                 else:
@@ -506,7 +506,7 @@ with tf.Session(config=gpu_config) as sess:
             T *= alpha
 
             # Monitoring Tensorboard:
-            if index_sample % 10 == 0:
+            if index_sample % 10 == 0: #and step % 10 == 0:
                 writer.add_scalars(f"cost_{index_sample}", {
                     "incumbent": next_distance,
                     "best_cost": min_distance
@@ -526,7 +526,7 @@ with tf.Session(config=gpu_config) as sess:
                     operator_names[i+1]: prob for i, prob in enumerate(action_probs)
                 }, step)
 
-
+            print(solution, action)
 
 
         start_timer = datetime.datetime.now()
@@ -576,17 +576,14 @@ with tf.Session(config=gpu_config) as sess:
 
         historical_baseline = 0
         for t, transition in enumerate(episode):
-            # total_return = sum(config.discount_factor**i * future_transition.reward for i, future_transition in enumerate(episode[t:]))
+            #total_return = sum(config.discount_factor**i * future_transition.reward for i, future_transition in enumerate(episode[t:]))
             # if historical_baseline is None:
             #     if transition.action == 0:
             #         #TODO: dynamic updating of historical baseline, and state definition
             #         historical_baseline = -current_best_distances[t]
-            #         # historical_baseline = 1/(current_best_distances[t] - 10)
             #     actions.append(0)
             #     advantages.append(0)
             #     continue
-            # if transition.action == 0:
-            #     historical_baseline = -current_distances[t]
             if transition.action > 0:
                 #total_return = transition.reward
                 if transition.reward < EPSILON:
@@ -597,7 +594,7 @@ with tf.Session(config=gpu_config) as sess:
                 # total_return = start_distances[t] - future_best_distances[t]
                 # total_return = min(total_return, 1.0)
                 # total_return = max(total_return, -1.0)
-                ##total_return = -future_best_distances[t]  # this was the default one, jakob
+                #total_return = -future_best_distances[t]  # this was the default one, jakob
                 # total_return = 1/(future_best_distances[t] - 10)
             else:
                 # if transition.state[-1] != 0 and transition.state[-2] < 1e-6:
@@ -670,3 +667,9 @@ with tf.Session(config=gpu_config) as sess:
     save_path = saver.save(sess, "./rollout_model.ckpt")
     print("Model saved in path: %s" % save_path)
     print('solving time = {}'.format(datetime.datetime.now() - start))
+
+
+
+# random action sequence:
+# actions=[16 11 16  1  2  2 11 11  7 22 14  2 15 11 15 11  2 15 11 15 11  7 22 11 15 21  6  2  7  2 15 11 22 21  2 22 11  3 15 21  2 15 14  2 15 11  2 15  2 22  7  2 15 11 15 11  2 11 11  2 15  2 11  7  2 15 11 11  1 22 14 11 15  3 15  1  2 22  7 15  1 22  1 15  2  2 15  7  2 15 11 16  8  3  2  2 22 11 21  7]
+# notice that it is sparingly using action 1 and 2, but rarely uses them twice in a row. This is what we want.

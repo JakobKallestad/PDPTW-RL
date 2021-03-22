@@ -9,7 +9,6 @@ import pickle
 import random
 import sys
 import tensorflow as tf
-from tensorflow.contrib import rnn
 from tensorboardX import SummaryWriter
 
 from sequence_encoder import encode_seq, embed_seq
@@ -21,53 +20,27 @@ from Operators import remove_insert, remove_single_best, remove_longest_tour_dev
 
 EPSILON = 1e-6
 
-logs_number = 'logs_35'
+logs_number = 'logs_100'
 writer = SummaryWriter(logs_number)
-
-def str2bool(v):
-    if isinstance(v, bool):
-       return v
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
-        return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-        return False
-    else:
-        raise argparse.ArgumentTypeError('Boolean value expected.')
 
 
 def get_config(args=None):
     parser = argparse.ArgumentParser(description="Meta optimization")
-    parser.add_argument('--epoch_size', type=int, default=5120000, help='Epoch size')
-
-    parser.add_argument('--num_feedforward_units', type=int, default=128, help="number of feedforward units")
-    parser.add_argument('--train_operators', type=str2bool, nargs='?', const=True, default=False, help="")
-
-    parser.add_argument('--num_training_points', type=int, default=100, help="size of the problem for training")
-    parser.add_argument('--num_test_points', type=int, default=100, help="size of the problem for testing")
-    parser.add_argument('--num_episode', type=int, default=40000, help="number of training episode")
-    parser.add_argument('--max_num_rows', type=int, default=2000000, help="")
-    parser.add_argument('--batch_size', type=int, default=2000, help='batch size')
-    parser.add_argument('--max_rollout_steps', type=int, default=20000, help="maximum rollout steps")
-    parser.add_argument('--max_rollout_seconds', type=int, default=1000, help="maximum rollout time in seconds")
-    parser.add_argument('--use_rl_loss', type=str2bool, nargs='?', const=True, default=True, help="")
-    parser.add_argument('--epsilon_greedy', type=float, default=0.05, help="")
-    parser.add_argument('--sample_actions_in_rollout', type=str2bool, nargs='?', const=True, default=True, help="")
-    parser.add_argument('--num_active_learning_iterations', type=int, default=1, help="")
-    parser.add_argument('--max_no_improvement', type=int, default=6, help="")
-    parser.add_argument('--debug_mode', type=str2bool, nargs='?', const=True, default=False, help="")
-    parser.add_argument('--debug_steps', type=int, default=1, help="")
-    parser.add_argument('--num_actions', type=int, default=24, help="dimension of action space")
+    parser.add_argument('--num_nodes', type=int, default=100, help="size of the problem for training")
+    parser.add_argument('--num_episode', type=int, default=1000, help="number of training episode")
+    parser.add_argument('--max_rollout_steps', type=int, default=1000, help="maximum rollout steps")
+    parser.add_argument('--max_rollout_seconds', type=int, default=1000000, help="maximum rollout time in seconds")
+    parser.add_argument('--sample_actions_in_rollout', type=bool, nargs='?', const=True, default=True, help="")
+    parser.add_argument('--num_actions', type=int, default=29, help="dimension of action space")
     parser.add_argument('--problem_seed', type=int, default=1, help="problem generating seed")
     parser.add_argument('--input_embedded_trip_dim_2', type=int, default=11, help="")
     parser.add_argument('--num_embedded_dim_1', type=int, default=64, help="")
-    parser.add_argument('--num_embedded_dim_2', type=int, default=64, help="dim")
-    parser.add_argument('--discount_factor', type=float, default=1.0, help="discount factor of policy network")
+    parser.add_argument('--discount_factor', type=float, default=0.9, help="discount factor of policy network")
     parser.add_argument('--policy_learning_rate', type=float, default=0.001, help="learning rate of policy network")
     parser.add_argument('--hidden_layer_dim', type=int, default=64, help="dimension of hidden layer in policy network")
     parser.add_argument('--num_history_action_use', type=int, default=0, help="number of history actions used in the representation of current state")
     parser.add_argument('--step_interval', type=int, default=100)
 
-    # './rollout_model_1850.ckpt'
     parser.add_argument('--model_to_restore', type=str, default=None, help="")
     parser.add_argument('--max_num_training_epsisodes', type=int, default=10000000, help="")
 
@@ -79,8 +52,6 @@ def get_config(args=None):
 
 
 config = get_config()
-if config.max_no_improvement is None:
-    config.max_no_improvement = config.num_actions
 
 
 
@@ -91,22 +62,23 @@ CAPACITY_MAP = {
     100: 25,  # 50
 }
 
-
-# OPERATORS
+# Operators and logic
 remove_operators = [remove_single_best, remove_longest_tour_deviation, remove_tour_neighbors,
-                        remove_xs, remove_s, remove_m, remove_l, remove_xl]
-insert_operators = [insert_greedy, insert_beam_search, insert_tour]  # insert_first,
+                    remove_xs, remove_s, remove_m, remove_l, remove_xl]
+insert_operators = [insert_greedy, insert_beam_search, insert_tour, insert_first]  # insert_first
 
 len_r_op = len(remove_operators)
 len_i_op = len(insert_operators)
-n_operators = len_r_op * len_i_op
+
+operators = [(remove_operators[i // len_i_op], insert_operators[i % len_i_op]) for i in
+             range(len_i_op - 1, len_r_op * len_i_op)]
 
 operator_names = {
-    i: f"{i:02d}" + ":    " + '   &   '.join((str(remove_operators[i // len_i_op]).split()[1], str(insert_operators[i % len_i_op]).split()[1])) for i in range(config.num_actions)
+    i: f"{i:02d}" + ":    " + '   &   '.join((str(a).split()[1], str(b).split()[1]))
+    for i, (a, b) in enumerate(operators)
 }
-operator_names[0] = "00:    Perturb"
-operator_names[1] = "01:    remove_and_insert_single_best"
-operator_names[2] = "02:    remove_and_insert_single_best"
+operator_names[0] = "00:    remove_and_insert_single_best"
+
 
 
 class PDP:
@@ -177,35 +149,8 @@ if config.dataset_from_file is not None:
     dataset = load_pdp_from_file(config.dataset_from_file)
 
 
-def improve_solution_by_action(pdp, solution, action):
-    if action == 0:  # Perturb
-        #n = random.randint(1, 7)
-        remove_op = remove_xs  # remove_operators[n]
-        op = (remove_op, insert_first)
-    else:  # Intensify
-        remove_op = remove_operators[action // len_i_op]
-        insert_op = insert_operators[action % len_i_op]
-        op = (remove_op, insert_op)
-    new_solution, cost = remove_insert(pdp, solution, op)
-    return new_solution
-
-
-is_training = tf.placeholder(tf.bool)
-keep_prob = tf.placeholder(tf.float32)
-
-
 def construct_solution(pdp):
-    return [i for i in range(1, pdp.size + 1)]  # Try to perturb solution in a meaningful way!
-
-
-def get_num_points(config):
-    if config.model_to_restore is None:
-        return config.num_training_points
-    else:
-        return config.num_test_points
-
-
-ATTENTION_ROLLOUT, LSTM_ROLLOUT = True, False #False, True
+    return [i for i in range(1, pdp.size + 1)]
 
 
 def embedding_net_2(input_):
@@ -225,14 +170,14 @@ def embedding_net_attention(input_):
         layer_attention = encode_seq(input_seq=x, input_dim=128, num_stacks=3, num_heads=16, num_neurons=512, is_training=True, dropout_rate=0.1)
         layer_attention = tf.reshape(layer_attention, [-1, config.max_trips_per_solution * 128])
         layer_2 = tf.contrib.layers.fully_connected(layer_attention, config.num_embedded_dim, activation_fn=tf.nn.relu)
-        layer_2 = tf.nn.dropout(layer_2, keep_prob)
     return layer_2
 
 
-TEST_X = tf.placeholder(tf.float32, [None, config.num_training_points, config.input_embedded_trip_dim_2])
+TEST_X = tf.placeholder(tf.float32, [None, config.num_nodes, config.input_embedded_trip_dim_2])
 embedded_x = embedding_net_2(TEST_X)
-env_observation_space_n = config.num_history_action_use * 2 + 5
-action_labels_placeholder = tf.placeholder("float", [None, config.num_actions - 1])
+#embedded_x = embedding_net_attention(TEST_X)
+env_observation_space_n = config.num_history_action_use * 2 + 9
+action_labels_placeholder = tf.placeholder("float", [None, config.num_actions])
 
 
 class PolicyEstimator():
@@ -251,7 +196,7 @@ class PolicyEstimator():
                 activation_fn=tf.nn.relu)
             self.logits = tf.contrib.layers.fully_connected(
                 inputs=self.hidden1,
-                num_outputs=config.num_actions - 1,
+                num_outputs=config.num_actions,
                 activation_fn=None)
             #https://stackoverflow.com/questions/33712178/tensorflow-nan-bug?newreg=c7e31a867765444280ba3ca50b657a07
             self.action_probs = tf.clip_by_value(tf.nn.softmax(self.logits), 1e-10, 1.0)
@@ -275,35 +220,26 @@ class PolicyEstimator():
 
     def predict(self, states, test_x, sess=None):
         sess = sess or tf.get_default_session()
-        feed_dict = {self.states: states, TEST_X: test_x, keep_prob: 1.0}
+        feed_dict = {self.states: states, TEST_X: test_x}
         return sess.run(self.action_probs, feed_dict)
 
     def update(self, states, test_x, advantages, actions, sess=None):
         sess = sess or tf.get_default_session()
-        feed_dict = {self.states: states, self.advantages: advantages, self.actions: actions, TEST_X:test_x, keep_prob:1.0}
+        feed_dict = {self.states: states, self.advantages: advantages, self.actions: actions, TEST_X:test_x}
         _, loss = sess.run([self.train_op, self.loss], feed_dict)
         return loss
 
 
-previous_solution = None
-initial_solution = None
-best_solution = None
-
-
 def env_act(pdp, solution, action):
-    new_solution = improve_solution_by_action(pdp, solution, action)
-    cost = objective_function(pdp, new_solution)
-    if cost == float('inf'):
-        print('Invalid solution!')
+    op = operators[action]
+    new_solution, cost = remove_insert(pdp, solution, op)
     return new_solution, cost
 
 
-action_timers = [0.0] * (config.num_actions * 2)
-
-
-def env_generate_state(min_distance=None, state=None, action=None, distance=None, next_distance=None):
-    if state is None or action == 0:
-        next_state = [0.0, 0.0, 0]
+def env_generate_state(min_distance=None, state=None, action=None, distance=None, next_distance=None, was_changed=None,
+                       unseen=None, no_improvement=None, step=None):
+    if state is None:
+        next_state = [0.0, 0.0, 0, was_changed, unseen, no_improvement, step]
         for _ in range(config.num_history_action_use):
             next_state.append(0.0)
             next_state.append(0)
@@ -315,7 +251,7 @@ def env_generate_state(min_distance=None, state=None, action=None, distance=None
             delta_sign = -1.0
         else:
             delta_sign = 1.0
-        next_state = [0.0, next_distance - min_distance, delta]
+        next_state = [0.0, next_distance - min_distance, delta, was_changed, unseen, no_improvement, step]  # Do I need to 1-hot encode the action here?
         if config.num_history_action_use != 0:
             next_state.extend(state[(-config.num_history_action_use * 2):])
         next_state.append(delta_sign)
@@ -323,28 +259,51 @@ def env_generate_state(min_distance=None, state=None, action=None, distance=None
     return next_state
 
 
-def env_step(step, state, pdp, min_distance, solution, distance, action, record_time=True, T=None):
-    start_timer = datetime.datetime.now()
-    new_solution, next_distance = env_act(pdp, solution, action)
-
-    next_state = env_generate_state(min_distance, state, action, distance, next_distance)
-    reward = distance - next_distance
-
-    # Using SA for acceptance criteria
-    d_E = next_distance - distance
-    if d_E < 0 or action == 0:
-        solution = new_solution
-    elif next_distance < float('inf') and random.random() < math.e ** (-d_E / T):
-        solution = new_solution
+def get_reward(d_E, distance, next_distance, solution, next_solution, min_distance, unseen, was_changed, T):
+    if next_distance < min_distance:
+        next_solution = next_solution
+        next_distance = next_distance
+        reward = -d_E*100
+    elif d_E < 0:
+        next_solution = next_solution
+        next_distance = next_distance
+        if unseen:
+            reward = -d_E*10
+        else:
+            reward = -d_E*5
+    elif next_distance < float('inf') and unseen and random.random() < math.e ** (-d_E / T):
+        next_solution = next_solution
+        next_distance = next_distance
+        reward = 0.01  # kind of random, but designed to be less than the other rewards above for pdp100
     else:
+        next_solution = solution
         next_distance = distance
+        if was_changed:
+            reward = 0
+        else:
+            reward = -0.5  # kind of random, may have to go with something less extreme
+    return next_solution, next_distance, reward
+
+
+
+def env_step(step, state, pdp, min_distance, solution, distance, action, memory, no_improvement, T=None):
+    start_timer = datetime.datetime.now()
+    next_solution, next_distance = env_act(pdp, solution, action)
+    unseen = str(next_solution) not in memory
+    was_changed = solution != next_solution
+
+    next_state = env_generate_state(min_distance, state, action, distance, next_distance, was_changed=int(was_changed),
+                                    unseen=int(unseen), no_improvement=no_improvement, step=step)
+
+    d_E = next_distance - distance
+    next_solution, next_distance, reward = get_reward(d_E, distance, next_distance, solution, next_solution, min_distance,
+                                                      unseen, was_changed, T)
 
     end_timer = datetime.datetime.now()
-    if record_time:
-        action_timers[action * 2] += 1
-        action_timers[action * 2 + 1] += (end_timer - start_timer).total_seconds()
+    action_timers[action * 2] += 1
+    action_timers[action * 2 + 1] += (end_timer - start_timer).total_seconds()
     done = (datetime.datetime.now() - env_start_time).total_seconds() >= config.max_rollout_seconds
-    return next_state, reward, done, solution, next_distance
+    return next_state, reward, done, next_solution, next_distance
 
 
 def initialize_uninitialized(sess):
@@ -356,6 +315,11 @@ def initialize_uninitialized(sess):
     if len(not_initialized_vars):
         sess.run(tf.variables_initializer(not_initialized_vars))
 
+
+previous_solution = None
+initial_solution = None
+best_solution = None
+action_timers = [0.0] * (config.num_actions * 2)
 
 gpu_config = tf.ConfigProto()
 gpu_config.gpu_options.allow_growth = True
@@ -373,12 +337,6 @@ with tf.Session(config=gpu_config) as sess:
         saver.restore(sess, config.model_to_restore)
 
     distances = []
-    steps = []
-    consolidated_distances, consolidated_steps = [], []
-    timers = []
-    num_checkpoint = int(config.max_rollout_steps/config.step_interval)
-    step_record = np.zeros((2, num_checkpoint))
-    distance_record = np.zeros((2, num_checkpoint))
     start = datetime.datetime.now()
     seed = config.problem_seed
     tf.set_random_seed(seed)
@@ -388,7 +346,7 @@ with tf.Session(config=gpu_config) as sess:
 
         # SA:
         T_0 = 5
-        alpha = 0.993
+        alpha = 0.996
         T = T_0
 
         states = []
@@ -396,17 +354,18 @@ with tf.Session(config=gpu_config) as sess:
         actions = []
         advantages = []
         action_labels = []
-        if index_sample > 0 and index_sample % config.debug_steps == 0:
+        if index_sample > 0:
             print(f"index sample: {index_sample}")
 
         # PDP data:
         if config.dataset_from_file is not None:
             pdp = dataset[index_sample]
         else:
-            pdp = generate_problem(size=config.num_training_points)
+            pdp = generate_problem(size=config.num_nodes)
         #pdp.initialize_close_calls()
         solution = construct_solution(pdp)
         best_solution = copy.copy(solution)
+        memory = {str(solution)}  # used to check if solution has been previously encountered or not.
 
         embedded_trip = embed_solution(pdp, solution)
         min_distance = objective_function(pdp, solution)
@@ -417,9 +376,7 @@ with tf.Session(config=gpu_config) as sess:
         env_start_time = datetime.datetime.now()
         episode = []
         current_best_distances = []
-        start_distance = distance
         current_distances = []
-        start_distances = []
 
         inference_time = 0
         gpu_inference_time = 0
@@ -446,23 +403,19 @@ with tf.Session(config=gpu_config) as sess:
             states.append(state)
             trips.append(embedded_trip)
 
-            if config.model_to_restore is "None" and no_improvement >= config.max_no_improvement:  #(config.model_to_restore is not None and should_restart(min_distance, distance, no_improvement)) or no_improvement >= config.max_no_improvement:
-                action = 0
-                no_improvement = 0
+            if config.sample_actions_in_rollout:
+                action = np.random.choice(np.arange(len(action_probs)), p=action_probs)
             else:
-                if config.model_to_restore is "None" and np.random.uniform() < config.epsilon_greedy:
-                    action = np.random.randint(config.num_actions - 1) + 1
-                    num_random_actions += 1
-                else:
-                    if config.sample_actions_in_rollout:
-                        action = np.random.choice(np.arange(len(action_probs)), p=action_probs) + 1
-                    else:
-                        action = np.argmax(action_probs) + 1
+                action = np.argmax(action_probs)
+
             end_timer = datetime.datetime.now()
             inference_time += (end_timer - start_timer).total_seconds()
             start_timer = end_timer
 
-            next_state, reward, done, next_solution, next_distance = env_step(step, state, pdp, min_distance, solution, distance, action, T=T)
+            next_state, reward, done, next_solution, next_distance = env_step(step, state, pdp, min_distance, solution,
+                                                                              distance, action, memory, no_improvement,
+                                                                              T=T)
+            memory.add(str(next_solution))
             if next_distance >= distance - EPSILON:
                 no_improvement += 1
             else:
@@ -470,9 +423,6 @@ with tf.Session(config=gpu_config) as sess:
                 num_improvements += 1
 
             current_distances.append(distance)
-            start_distances.append(start_distance)
-            if action == 0:
-                start_distance = next_distance
             current_best_distances.append(min_distance)
             if next_distance < min_distance - EPSILON:
                 min_distance = next_distance
@@ -486,8 +436,8 @@ with tf.Session(config=gpu_config) as sess:
                 temp_timers = np.asarray(action_timers)
                 temp_count_timers = temp_timers[::2]
                 temp_time_timers = temp_timers[1::2]
-                print('time ={}'.format('\t\t'.join([str(x) for x in temp_time_timers])))
-                print('count={}'.format('\t\t'.join([str(x) for x in temp_count_timers])))
+                print('time ={}'.format('\t'.join([f"{x:.1f}" for x in temp_time_timers])))
+                print('count={}'.format('\t'.join([f"{int(x)}" for x in temp_count_timers])))
             if done:
                 break
 
@@ -502,11 +452,11 @@ with tf.Session(config=gpu_config) as sess:
             env_act_time += (end_timer - start_timer).total_seconds()
             start_timer = end_timer
 
-            # SA
+            # Reducing temperature according to SA cooling schedule
             T *= alpha
 
             # Monitoring Tensorboard:
-            if index_sample % 10 == 0: #and step % 10 == 0:
+            if index_sample % 100 == 0:
                 writer.add_scalars(f"cost_{index_sample}", {
                     "incumbent": next_distance,
                     "best_cost": min_distance
@@ -523,19 +473,17 @@ with tf.Session(config=gpu_config) as sess:
                 }, step)
 
                 writer.add_scalars(f"action_prob_{index_sample}", {
-                    operator_names[i+1]: prob for i, prob in enumerate(action_probs)
+                    operator_names[i]: prob for i, prob in enumerate(action_probs)
                 }, step)
-
-            print(solution, action)
 
 
         start_timer = datetime.datetime.now()
         distances.append(min_distance)
-        steps.append(min_step)
         if objective_function(pdp, best_solution) < float('inf'):
             print('solution={}'.format(best_solution))
         else:
-            print('invalid solution')
+            print(f'invalid solution: {best_solution}')
+            assert False
 
         # TENSORBOARD:
         writer.add_scalar('min_distance', float(min_distance), index_sample)
@@ -561,115 +509,48 @@ with tf.Session(config=gpu_config) as sess:
         # reset action_timers for each instance
         action_timers = [0.0] * (config.num_actions * 2)
 
-        with open(f'{logs_number}_results.txt', 'a') as file:
+        with open(f'{logs_number}/results.txt', 'a') as file:
             file.write(str(min_distance)+'\n')
 
-        future_best_distances = [0.0] * len(episode)
-        future_best_distances[-1] = episode[-1].next_distance
-        step = len(episode) - 2
-        while step >= 0:
-            if episode[step].action != 0:
-                future_best_distances[step] = future_best_distances[step + 1] * config.discount_factor
+        # Warmup period
+        for t, transition in enumerate(episode[:100]):
+            actions.append(0)
+            if transition.reward > 0:
+                advantages.append(0.01)
             else:
-                future_best_distances[step] = current_distances[step]
-            step = step - 1
+                advantages.append(-0.01)
 
-        historical_baseline = 0
-        for t, transition in enumerate(episode):
-            #total_return = sum(config.discount_factor**i * future_transition.reward for i, future_transition in enumerate(episode[t:]))
-            # if historical_baseline is None:
-            #     if transition.action == 0:
-            #         #TODO: dynamic updating of historical baseline, and state definition
-            #         historical_baseline = -current_best_distances[t]
-            #     actions.append(0)
-            #     advantages.append(0)
-            #     continue
-            if transition.action > 0:
-                #total_return = transition.reward
-                if transition.reward < EPSILON:
-                    total_return = -1.0
-                else:
-                    total_return = 1.0
-                #     total_return = min(transition.reward, 2.0)
-                # total_return = start_distances[t] - future_best_distances[t]
-                # total_return = min(total_return, 1.0)
-                # total_return = max(total_return, -1.0)
-                #total_return = -future_best_distances[t]  # this was the default one, jakob
-                # total_return = 1/(future_best_distances[t] - 10)
-            else:
-                # if transition.state[-1] != 0 and transition.state[-2] < 1e-6:
-                #     # if future_best_distances[t] < current_best_distances[t] - 1e-6:
-                #     total_return = 1.0
-                # else:
-                #     total_return = -1.0
-                total_return = 0
-                actions.append(0)
-                advantages.append(0)
-                continue
-            # baseline_value = value_estimator.predict(states)
-            # baseline_value = 0.0
-            baseline_value = historical_baseline
-            advantage = total_return - baseline_value
+        #baseline_value = current_best_distances[100]
+
+        # Search period
+        for t, transition in enumerate(episode[100:]):
             actions.append(transition.action)
-            advantages.append(advantage)
-            # value_estimator.update(states, [[total_return]], sess)
+
+            discounted_future_reward = 0
+            discount = 1
+            for k, trans in enumerate(episode[t:]):
+                discounted_future_reward += trans.reward*discount
+                discount *= config.discount_factor
+            advantages.append(discounted_future_reward)
+
 
         states = np.reshape(np.asarray(states), (-1, env_observation_space_n)).astype("float32")
-        trips = np.reshape(np.asarray(trips), (-1, config.num_training_points, config.input_embedded_trip_dim_2)).astype("float32")
+        trips = np.reshape(np.asarray(trips), (-1, config.num_nodes, config.input_embedded_trip_dim_2)).astype("float32")
         actions = np.reshape(np.asarray(actions), (-1))
         advantages = np.reshape(np.asarray(advantages), (-1)).astype("float32")
 
         print('num_random_actions={}'.format(num_random_actions))
         print('actions={}'.format(actions[:100]).replace('\n', ''))
         print('advantages={}'.format(advantages[:100]).replace('\n', ''))
-        if config.model_to_restore is None and index_sample <= config.max_num_training_epsisodes:
-            filtered_states = []
-            filtered_trips = []
-            filtered_advantages = []
-            filtered_actions = []
-            end = 0  # len(actions)+5  # 0
-            for action_index in range(len(actions)):
-                if actions[action_index] > 0:
-                    filtered_states.append(states[action_index])
-                    filtered_trips.append(trips[action_index])
-                    filtered_advantages.append(advantages[action_index])
-                    filtered_actions.append(actions[action_index] - 1)
-                else:
-                    num_bad_steps = config.max_no_improvement
-                    end = max(end, len(filtered_states) - num_bad_steps)
-                    filtered_states = filtered_states[:end]
-                    filtered_trips = filtered_trips[:end]
-                    filtered_advantages = filtered_advantages[:end]
-                    filtered_actions = filtered_actions[:end]
-            if end == 0:
-                end = len(filtered_states)
-
-            filtered_states = filtered_states[:end]
-            filtered_trips = filtered_trips[:end]
-            filtered_advantages = filtered_advantages[:end]
-            filtered_actions = filtered_actions[:end]
-            num_states = len(filtered_states)
-            if num_states > config.batch_size:
-                downsampled_indices = np.random.choice(range(num_states), config.batch_size, replace=False)
-                filtered_states = np.asarray(filtered_states)[downsampled_indices]
-                filtered_trips = np.asarray(filtered_trips)[downsampled_indices]
-                filtered_advantages = np.asarray(filtered_advantages)[downsampled_indices]
-                filtered_actions = np.asarray(filtered_actions)[downsampled_indices]
-            loss = policy_estimator.update(filtered_states, filtered_trips, filtered_advantages, filtered_actions, sess)
+        if config.model_to_restore is None:
+            loss = policy_estimator.update(states, trips, advantages, actions, sess)
             print('loss={}'.format(loss))
-        timers_epoch = [inference_time, gpu_inference_time, env_act_time, (datetime.datetime.now() - start_timer).total_seconds()]
-        timers_epoch.extend(action_timers)
-        timers.append(timers_epoch)
+        print(f"inference_time={inference_time}", f"gpu_inference_time={gpu_inference_time}",
+              f"env_act_time={env_act_time}", f"post_episode_time={(datetime.datetime.now() - start_timer).total_seconds()}",
+              sep='\t')
         if config.model_to_restore is None and index_sample > 0 and index_sample % 100 == 0:
-            save_path = saver.save(sess, f"./{logs_number}_model_{index_sample}_{config.num_history_action_use}.ckpt")
+            save_path = saver.save(sess, f"./trained_models/{logs_number}_model_{index_sample}_{config.num_history_action_use}.ckpt")
             print("Model saved in path: %s" % save_path)
 
-    save_path = saver.save(sess, "./rollout_model.ckpt")
-    print("Model saved in path: %s" % save_path)
-    print('solving time = {}'.format(datetime.datetime.now() - start))
+    print("DONE!")
 
-
-
-# random action sequence:
-# actions=[16 11 16  1  2  2 11 11  7 22 14  2 15 11 15 11  2 15 11 15 11  7 22 11 15 21  6  2  7  2 15 11 22 21  2 22 11  3 15 21  2 15 14  2 15 11  2 15  2 22  7  2 15 11 15 11  2 11 11  2 15  2 11  7  2 15 11 11  1 22 14 11 15  3 15  1  2 22  7 15  1 22  1 15  2  2 15  7  2 15 11 16  8  3  2  2 22 11 21  7]
-# notice that it is sparingly using action 1 and 2, but rarely uses them twice in a row. This is what we want.

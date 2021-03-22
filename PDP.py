@@ -73,7 +73,6 @@ def generate_problem(size=20):
             dist_matrix[j, i] = d
 
     pdp = PDP(size, n_calls, locations, capacities, calls, dist_matrix)
-    #pdp.save_problem()
     return pdp
 
 

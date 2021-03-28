@@ -30,11 +30,12 @@ def load_dataset(filename):
 GRAPH_SIZE = 20
 NUM_SAMPLES = 1000
 NAME = "TEST2"
-SEED = 1235
+SEED = 2345
 
-manual_seed(SEED)
-dataset = PDP.make_dataset(size=GRAPH_SIZE, num_samples=NUM_SAMPLES)
-save_dataset(dataset, f'data/pdp/pdp{GRAPH_SIZE}_{NAME}_seed{SEED}.pkl')
+#manual_seed(SEED)
+#dataset = PDP.make_dataset(size=GRAPH_SIZE, num_samples=NUM_SAMPLES)
+#save_dataset(dataset, f'data/pdp/pdp{GRAPH_SIZE}_{NAME}_seed{SEED}.pkl')
 
-
+#x = load_dataset("transformed_data3/pdp20_TEST1_seed1234.pkl")
+#f = True
 

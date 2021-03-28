@@ -4,14 +4,15 @@ import os
 import pickle
 from problem.StatePDP import StatePDP
 from utils.beam_search import beam_search  # Should this be here?
+import math
 
-HIGH_NUMBER = 10000000
+EPSILON = 1e-5
 
 class PDP(object):
 
     NAME = 'pdp'  # Capacitated Vehicle Routing Problem
 
-    VEHICLE_CAPACITY = 1.0  # (w.l.o.g. vehicle capacity is 1, demands should be scaled)
+    VEHICLE_CAPACITY = 1.0 + EPSILON  # (w.l.o.g. vehicle capacity is 1, demands should be scaled)
 
     @staticmethod
     def get_costs(dataset, pi):
@@ -128,6 +129,7 @@ class PDPDataset(Dataset):
                 demand = ((torch.FloatTensor(size // 2).uniform_(0, 9).int() + 1).float() / CAPACITIES[size]).repeat_interleave(2)
                 demand[1::2] *= -1
                 locs = torch.FloatTensor(size, 2).uniform_(0, 1)
+                diffs = (locs[1::2] - locs[0:-1:2])
                 self.data += [
                     {
                         'loc': locs,
@@ -135,7 +137,10 @@ class PDPDataset(Dataset):
                         'demand': demand,
                         'depot': torch.FloatTensor(2).uniform_(0, 1),
                         'type': torch.FloatTensor([True, False]).repeat(size//2),
-                        'p_or_d': torch.flatten(torch.stack((locs[1::2], locs[::2]), dim=1), start_dim=0, end_dim=1)
+                        'p_or_d': torch.flatten(torch.stack((locs[1::2], locs[::2]), dim=1), start_dim=0, end_dim=1),
+                        'dist': torch.flatten(torch.stack((diffs.norm(p=2, dim=1), torch.zeros(size//2)), dim=1), start_dim=0, end_dim=1),
+                        'angle': torch.flatten(torch.stack(((1.5*math.pi - torch.atan2(diffs[:, 0], diffs[:, 1])),
+                                                              torch.zeros(size//2)), dim=1), start_dim=0, end_dim=1) / (2*math.pi)
                     }
                 ]
 

@@ -71,7 +71,7 @@ class AttentionModel(nn.Module):
         step_context_dim = embedding_dim + 1
 
         # JAKOB: Lets try to add more dimensions here
-        node_dim = 5  # x, y, demand, type, p_or_d
+        node_dim = 7  # x, y, demand, type, p_or_d, dists, angles
 
         # JAKOB: This is included to account for "visited_" in context step
         self.project_node_step = nn.Linear(1, 3 * embedding_dim, bias=False)
@@ -207,7 +207,7 @@ class AttentionModel(nn.Module):
                 self.init_embed(torch.cat((
                     input['loc'],
                     #*(input[feat][:, :, None] for feat in features)
-                    *(input['type'][:, :, None], input['p_or_d']) # JAKOB: Change this back eventually, only to check that it works.
+                    *(input['type'][:, :, None], input['p_or_d'], input['dist'][:, :, None], input['angle'][:, :, None]) # JAKOB: Change this back eventually, only to check that it works.
                 ), -1))
             ),
             1

@@ -2,6 +2,7 @@ import torch
 from typing import NamedTuple
 from utils.boolmask import mask_long2bool, mask_long_scatter
 
+EPSILON = 1e-5
 
 class StatePDP(NamedTuple):
     # Fixed input
@@ -22,9 +23,9 @@ class StatePDP(NamedTuple):
 
     # New:
     forbidden: torch.Tensor
-    visited2: torch.Tensor # JAKOB: I had to add this which is identical to visited_ but torch.float32 type. Better way?
+    visited2: torch.Tensor  # JAKOB: I had to add this which is identical to visited_ but torch.float32 type. Better way?
 
-    VEHICLE_CAPACITY = 1.0  # Hardcoded
+    VEHICLE_CAPACITY = 1.0 + EPSILON  # Hardcoded
 
     @property
     def visited(self):

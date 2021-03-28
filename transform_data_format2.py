@@ -1,4 +1,5 @@
 from problem.pdp import PDP
+from generate_pdp_data import load_dataset
 
 
 def transform_dataset(dataset, file_loc):
@@ -45,8 +46,9 @@ def transform_data(data, file_loc):
         file.write(f"% EOF{newline}")
 
 
-dataset = PDP.make_dataset(size=100, num_samples=10)
-file_loc = "transformed_data2/InstanInstancePDP_1.datcePDP"
+#dataset = PDP.make_dataset(size=100, num_samples=10)
+dataset = load_dataset("data/pdp/pdp20_TEST1_seed1234.pkl")
+file_loc = "transformed_data2_CROSS_CHECK/pdp20_TEST1_seed1234"
 transform_dataset(dataset, file_loc)
 
 
